@@ -1,0 +1,38 @@
+# --- Sensitive / local data ---
+# SQLite database (generated at runtime)
+*.db
+*.sqlite
+*.sqlite3
+portfolio.db
+
+# CSV data exports (may contain sensitive portfolio information)
+*.csv
+data/*.csv
+
+# Local environment configuration
+.env
+.env.*
+
+# Runtime logs
+*.log
+server.log
+server.err.log
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.venv/
+venv/
+env/
+
+# --- IDE / OS ---
+.vscode/
+.idea/
+*.swp
+.DS_Store

@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Portfolio Dashboard</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="container">
+    <header class="page">
+      <div>
+        <h1>Investment Portfolio</h1>
+        <div class="sub" id="owner-name">Owner: All owners</div>
+      </div>
+      <nav class="nav">
+        <a href="/">Dashboard</a>
+        <a href="/trades.html">Log Trade</a>
+        <a href="/holdings_edit.html">Holdings Editor</a>
+      </nav>
+    </header>
+
+    <div class="toolbar">
+      <div class="toolbar-item">
+        <label for="owner-select">Owner</label>
+        <select id="owner-select"></select>
+      </div>
+    </div>
+
+    <div class="card-grid">
+      <div class="card">
+        <div class="label">Total Positions</div>
+        <div class="value" id="total-positions">-</div>
+      </div>
+      <div class="card">
+        <div class="label">Total Cost Basis</div>
+        <div class="value" id="cost-basis">-</div>
+      </div>
+      <div class="card">
+        <div class="label">Current Value</div>
+        <div class="value" id="current-value">-</div>
+      </div>
+      <div class="card">
+        <div class="label">Unrealized P&amp;L</div>
+        <div class="value" id="unrealized-pl">-</div>
+        <div class="sub" id="pl-percent">P&amp;L %: -</div>
+      </div>
+    </div>
+
+    <div class="section-title">Holdings</div>
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Symbol</th>
+          <th class="num">Quantity</th>
+          <th>Owner Split</th>
+          <th class="num">Cost Basis</th>
+          <th class="num">Current Price</th>
+          <th class="num">Current Value</th>
+          <th class="num">Unrealized P&amp;L</th>
+          <th>Sector</th>
+        </tr>
+      </thead>
+      <tbody id="holdings-body">
+        <tr><td colspan="8" class="empty">Loading holdings...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+const API = '/api/v1';
+
+async function fetchJson(url) {
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error('Request failed: ' + res.status + ' ' + url);
+  }
+  return res.json();
+}
+
+function fmtMoney(v) {
+  const negative = v < 0;
+  const text = Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return (negative ? '-$' : '$') + text;
+}
+
+function fmtNum(v, digits) {
+  return Number(v).toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}
+
+function fmtPct(v) { return fmtNum(v, 2) + '%'; }
+
+function fmtQty(v) {
+  const text = String(Number(v).toFixed(6)).replace(/\.?0+$/, '');
+  return text === '' || text === '-' ? '0' : text;
+}
+
+function esc(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function valueClass(v) { return v >= 0 ? 'positive' : 'negative'; }
+
+let selectedOwner = 'all';
+
+async function loadOwners() {
+  const owners = await fetchJson(API + '/owners');
+  const select = document.getElementById('owner-select');
+  const allOption = document.createElement('option');
+  allOption.value = 'all';
+  allOption.textContent = 'All owners';
+  select.appendChild(allOption);
+  for (const owner of owners) {
+    const option = document.createElement('option');
+    option.value = String(owner.owner_id);
+    option.textContent = owner.name;
+    select.appendChild(option);
+  }
+  select.addEventListener('change', (event) => {
+    selectedOwner = event.target.value;
+    load();
+  });
+}
+
+async function load() {
+  const param = selectedOwner === 'all' ? '' : '?owner_id=' + selectedOwner;
+  try {
+    const summary = await fetchJson(API + '/analytics/summary' + param);
+    renderSummary(summary);
+    const holdings = await fetchJson(API + '/holdings' + param);
+    renderHoldings(holdings);
+  } catch (error) {
+    document.getElementById('holdings-body').innerHTML =
+      '<tr><td colspan="8" class="empty">' + esc(error.message) + '</td></tr>';
+  }
+}
+
+function renderSummary(summary) {
+  document.getElementById('owner-name').textContent =
+    summary.owner_name ? 'Owner: ' + summary.owner_name : 'Owner: All owners';
+  document.getElementById('total-positions').textContent = summary.total_positions;
+  document.getElementById('cost-basis').textContent = fmtMoney(summary.total_cost_basis);
+  const currentValue = document.getElementById('current-value');
+  currentValue.textContent = fmtMoney(summary.total_current_value);
+  const pl = document.getElementById('unrealized-pl');
+  pl.textContent = fmtMoney(summary.unrealized_pl);
+  pl.className = 'value ' + valueClass(summary.unrealized_pl);
+  const plPercent = document.getElementById('pl-percent');
+  plPercent.textContent = 'P&L %: ' + fmtPct(summary.pl_percent);
+  plPercent.className = 'sub ' + valueClass(summary.pl_percent);
+}
+
+function renderHoldings(rows) {
+  const tbody = document.getElementById('holdings-body');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="empty">No holdings found.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map((row) => {
+    const split = row.splits.find((s) => s.owner_id === Number(selectedOwner));
+    let quantity, splitText, costBasis, currentBasis, currentValue, pl, plClass;
+    if (selectedOwner === 'all' || !split) {
+      quantity = row.quantity;
+      splitText = selectedOwner === 'all' ? '\u2014' : 'No split';
+      costBasis = row.cost_basis;
+      currentValue = row.current_value;
+      pl = row.unrealized_pl;
+      plClass = valueClass(row.unrealized_pl);
+    } else {
+      quantity = split.shares;
+      splitText = fmtNum(split.percentage, 2) + '%';
+      costBasis = split.cost_basis;
+      currentValue = split.shares * (row.current_price || 0);
+      pl = currentValue - split.cost_basis;
+      plClass = valueClass(pl);
+    }
+    const price = row.current_price == null ? '\u2014' : fmtMoney(row.current_price);
+    return '<tr>' +
+      '<td><strong>' + esc(row.symbol) + '</strong></td>' +
+      '<td class="num">' + fmtQty(quantity) + '</td>' +
+      '<td>' + splitText + '</td>' +
+      '<td class="num">' + fmtMoney(costBasis) + '</td>' +
+      '<td class="num">' + price + '</td>' +
+      '<td class="num">' + fmtMoney(currentValue) + '</td>' +
+      '<td class="num ' + plClass + '">' + fmtMoney(pl) + '</td>' +
+      '<td>' + esc(row.sector || '\u2014') + '</td>' +
+      '</tr>';
+  }).join('');
+}
+
+loadOwners().then(load);
+</script>
+</body>
+</html>

@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Log Trade</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="container">
+    <header class="page">
+      <div>
+        <h1>Log Trade</h1>
+        <div class="sub">All buys, sells, and dividends are recorded in the audit trail.</div>
+      </div>
+      <nav class="nav">
+        <a href="/">Dashboard</a>
+        <a href="/trades.html">Log Trade</a>
+        <a href="/holdings_edit.html">Holdings Editor</a>
+      </nav>
+    </header>
+
+    <div class="section-title">Trade Details</div>
+    <div class="message" id="message"></div>
+    <form id="trade-form" class="form-row">
+      <div class="field">
+        <label for="owner-select">Owner</label>
+        <select id="owner-select" required></select>
+      </div>
+      <div class="field">
+        <label for="symbol-input">Symbol</label>
+        <input type="text" id="symbol-input" maxlength="10" required placeholder="e.g. SGI">
+      </div>
+      <div class="field">
+        <label for="trade-type">Type</label>
+        <select id="trade-type" required>
+          <option value="buy">Buy</option>
+          <option value="sell">Sell</option>
+          <option value="dividend">Dividend</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="quantity-input">Quantity</label>
+        <input type="number" id="quantity-input" step="0.000001" min="0.000001" required placeholder="0.000001">
+      </div>
+      <div class="field">
+        <label for="price-input">Price</label>
+        <input type="number" id="price-input" step="0.01" min="0" required placeholder="0.00">
+      </div>
+      <div class="field">
+        <label for="trade-date">Trade Date</label>
+        <input type="date" id="trade-date" required>
+      </div>
+      <div class="field">
+        <label for="notes-input">Notes</label>
+        <input type="text" id="notes-input" maxlength="200" placeholder="Optional">
+      </div>
+    </form>
+    <div class="form-actions">
+      <button type="submit" id="submit-button">Log Trade</button>
+    </div>
+
+    <div class="section-title">Holdings</div>
+    <table class="data">
+      <thead>
+        <tr>
+          <th>Symbol</th>
+          <th class="num">Quantity</th>
+          <th class="num">Cost Basis</th>
+          <th class="num">Current Price</th>
+          <th class="num">Current Value</th>
+          <th class="num">Unrealized P&amp;L</th>
+        </tr>
+      </thead>
+      <tbody id="holdings-body">
+        <tr><td colspan="6" class="empty">Loading holdings...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+const API = '/api/v1';
+
+async function fetchJson(url, options) {
+  const res = await fetch(url, options);
+  if (!res.ok) {
+    throw new Error('Request failed: ' + res.status + ' ' + url);
+  }
+  return res.json();
+}
+
+async function postJson(url, payload) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error = new Error(body.detail || 'Request failed: ' + res.status);
+    error.status = res.status;
+    throw error;
+  }
+  return body;
+}
+
+function fmtMoney(v) {
+  const negative = v < 0;
+  const text = Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return (negative ? '-$' : '$') + text;
+}
+
+function fmtQty(v) {
+  const text = String(Number(v).toFixed(6)).replace(/\.?0+$/, '');
+  return text === '' || text === '-' ? '0' : text;
+}
+
+function esc(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function valueClass(v) { return v >= 0 ? 'positive' : 'negative'; }
+
+const messageBox = document.getElementById('message');
+const ownerSelect = document.getElementById('owner-select');
+const symbolInput = document.getElementById('symbol-input');
+const typeSelect = document.getElementById('trade-type');
+const quantityInput = document.getElementById('quantity-input');
+const priceInput = document.getElementById('price-input');
+const dateInput = document.getElementById('trade-date');
+const notesInput = document.getElementById('notes-input');
+
+function showMessage(text, kind) {
+  messageBox.className = 'message ' + kind;
+  messageBox.textContent = text;
+}
+
+function todayLocal() {
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
+async function loadOwners() {
+  const owners = await fetchJson(API + '/owners');
+  for (const owner of owners) {
+    const option = document.createElement('option');
+    option.value = String(owner.owner_id);
+    option.textContent = owner.name;
+    ownerSelect.appendChild(option);
+  }
+  dateInput.value = todayLocal();
+  ownerSelect.addEventListener('change', () => loadHoldings());
+}
+
+async function loadHoldings() {
+  const ownerValue = ownerSelect.value;
+  try {
+    const holdings = await fetchJson(API + '/holdings?owner_id=' + ownerValue);
+    renderHoldings(holdings, Number(ownerValue));
+  } catch (error) {
+    document.getElementById('holdings-body').innerHTML =
+      '<tr><td colspan="6" class="empty">' + esc(error.message) + '</td></tr>';
+  }
+}
+
+function renderHoldings(rows, ownerId) {
+  const tbody = document.getElementById('holdings-body');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">No holdings for this owner.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map((row) => {
+    const split = row.splits.find((s) => s.owner_id === ownerId);
+    if (!split) {
+      return '<tr><td><strong>' + esc(row.symbol) + '</strong></td><td colspan="5">No split for this owner</td></tr>';
+    }
+    const currentPrice = row.current_price || 0;
+    const currentValue = split.shares * currentPrice;
+    const pl = currentValue - split.cost_basis;
+    return '<tr>' +
+      '<td><strong>' + esc(row.symbol) + '</strong></td>' +
+      '<td class="num">' + fmtQty(split.shares) + '</td>' +
+      '<td class="num">' + fmtMoney(split.cost_basis) + '</td>' +
+      '<td class="num">' + fmtMoney(currentPrice) + '</td>' +
+      '<td class="num">' + fmtMoney(currentValue) + '</td>' +
+      '<td class="num ' + valueClass(pl) + '">' + fmtMoney(pl) + '</td>' +
+      '</tr>';
+  }).join('');
+}
+
+document.getElementById('trade-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  messageBox.className = 'message';
+  messageBox.textContent = '';
+  [ownerSelect, symbolInput, quantityInput, priceInput, dateInput].forEach((el) => el.classList.remove('invalid'));
+
+  const quantity = Number(quantityInput.value);
+  const price = Number(priceInput.value);
+  const symbol = symbolInput.value.trim();
+
+  if (!ownerSelect.value) {
+    ownerSelect.classList.add('invalid');
+    showMessage('Please select an owner.', 'error');
+    return;
+  }
+  if (!symbol) {
+    symbolInput.classList.add('invalid');
+    showMessage('Please enter a symbol.', 'error');
+    return;
+  }
+  if (!Number.isFinite(quantity) || quantity <= 0) {
+    quantityInput.classList.add('invalid');
+    showMessage('Quantity must be greater than zero.', 'error');
+    return;
+  }
+  if (!Number.isFinite(price) || price < 0) {
+    priceInput.classList.add('invalid');
+    showMessage('Price cannot be negative.', 'error');
+    return;
+  }
+
+  const payload = {
+    owner_id: Number(ownerSelect.value),
+    symbol: symbol,
+    trade_type: typeSelect.value,
+    quantity: quantity,
+    price: price,
+    trade_date: dateInput.value,
+    notes: notesInput.value.trim() || null,
+  };
+
+  const submitButton = document.getElementById('submit-button');
+  submitButton.disabled = true;
+  submitButton.textContent = 'Saving...';
+  try {
+    const trade = await postJson(API + '/trades', payload);
+    showMessage(
+      'Trade #' + trade.trade_id + ' logged (' + trade.trade_type + ' ' + fmtQty(trade.quantity) +
+      ' ' + trade.symbol + ' @ ' + fmtMoney(trade.price) + ').',
+      'success'
+    );
+    loadHoldings();
+  } catch (error) {
+    showMessage(error.message, 'error');
+  } finally {
+    submitButton.disabled = false;
+    submitButton.textContent = 'Log Trade';
+  }
+});
+
+loadOwners().then(loadHoldings);
+</script>
+</body>
+</html>
