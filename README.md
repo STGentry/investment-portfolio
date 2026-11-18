@@ -42,7 +42,7 @@ owners table is already populated.
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 ```powershell
-PS C:\Users\g3ntr\Source\Repos\investment-portfolio> Start-Process -FilePath "py" -ArgumentList "-3.11","-m","uvicorn","app.main:app","--host","0.0.0.0","--port","8000" -WorkingDirectory (Get-Location) -RedirectStandardOutput "server.log" -RedirectStandardError "server.err.log" -NoNewWindow; Start-Sleep -Seconds 4; echo "=== server.err.log ==="; Get-Content server.err.log -Tail 20; echo "=== server.log ==="; Get-Content server.log -Tail 10
+PS C:...\investment-portfolio> Start-Process -FilePath "py" -ArgumentList "-3.11","-m","uvicorn","app.main:app","--host","0.0.0.0","--port","8000" -WorkingDirectory (Get-Location) -RedirectStandardOutput "server.log" -RedirectStandardError "server.err.log" -NoNewWindow; Start-Sleep -Seconds 4; echo "=== server.err.log ==="; Get-Content server.err.log -Tail 20; echo "=== server.log ==="; Get-Content server.log -Tail 10
 ```
 
 Open <http://localhost:8000> for the dashboard.

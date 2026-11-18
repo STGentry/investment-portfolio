@@ -72,13 +72,14 @@
           <th class="num">Current Value</th>
           <th class="num">Unrealized P&amp;L</th>
           <th>Sector</th>
+          <th>Industry</th>
           <th class="num">Dividend Amount</th>
           <th>Dividend Frequency</th>
           <th>Save</th>
         </tr>
       </thead>
       <tbody id="holdings-body">
-        <tr><td colspan="11" class="empty">Loading holdings...</td></tr>
+        <tr><td colspan="12" class="empty">Loading holdings...</td></tr>
       </tbody>
     </table>
   </div>
@@ -259,7 +260,7 @@ async function load() {
     renderHoldings(holdings);
   } catch (error) {
     document.getElementById('holdings-body').innerHTML =
-      '<tr><td colspan="10" class="empty">' + esc(error.message) + '</td></tr>';
+      '<tr><td colspan="12" class="empty">' + esc(error.message) + '</td></tr>';
   }
 }
 
@@ -281,7 +282,7 @@ function renderSummary(summary) {
 function renderHoldings(rows) {
   const tbody = document.getElementById('holdings-body');
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="11" class="empty">No holdings found.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="12" class="empty">No holdings found.</td></tr>';
     return;
   }
   tbody.innerHTML = rows.map((row) => {
@@ -316,6 +317,7 @@ function renderHoldings(rows) {
       '<td class="num">' + fmtMoney(currentValue) + '</td>' +
       '<td class="num ' + plClass + '">' + fmtMoney(pl) + '</td>' +
       '<td>' + esc(row.sector || '\u2014') + '</td>' +
+      '<td>' + esc(row.industry || '\u2014') + '</td>' +
       '<td class="num"><input type="number" step="any" min="0" class="dividend-amount-input" ' +
         'data-symbol="' + symbol + '" value="' + fmtNum(dividendAmount, 2) + '"></td>' +
       '<td><input type="text" class="dividend-frequency-input" ' +
@@ -386,7 +388,7 @@ loadOwners()
   .then(load)
   .catch((error) => {
     document.getElementById('holdings-body').innerHTML =
-      '<tr><td colspan="11" class="empty">' + esc(error.message) + '</td></tr>';
+      '<tr><td colspan="12" class="empty">' + esc(error.message) + '</td></tr>';
   });
 </script>
 </body>
