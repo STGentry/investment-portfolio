@@ -6,10 +6,9 @@ the local network is reserved for future ML analysis (not implemented yet).
 
 ## Features
 
-- Single brokerage account with multiple owners (Dad, Emmett) sharing positions by percentage
+- Single brokerage account with multiple owners sharing positions by percentage
 - Fractional share quantities
 - Full audit trail of all buy/sell/dividend trades
-- Data migration from a Google Sheets CSV export
 - Dashboard, trade entry form, and ownership split editor (static HTML/CSS, no build step)
 
 ## Requirements
