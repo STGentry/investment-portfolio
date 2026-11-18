@@ -26,7 +26,7 @@ body {
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
-.container { max-width: 1100px; margin: 0 auto; padding: 24px 16px 64px; }
+.container { max-width: 1920px; margin: 0 auto; padding: 24px 16px 64px; }
 
 header.page {
   display: flex;
@@ -85,6 +85,7 @@ header.page .nav a:hover { background: #eef2f6; text-decoration: none; }
   align-items: flex-end;
 }
 .toolbar .toolbar-item { margin-right: 0; }
+.toolbar-actions { display: flex; align-items: center; }
 .toolbar label { font-size: 13px; font-weight: 600; display: block; margin-bottom: 4px; }
 select, input, textarea {
   font: inherit;
@@ -100,6 +101,12 @@ input[type="number"] { width: 120px; }
 .dividend-amount-input { width: 90px; }
 .dividend-frequency-input { width: 130px; }
 select { width: auto; min-width: 150px; }
+select[multiple] {
+  min-width: 220px;
+  min-height: 96px;
+  height: auto;
+  padding: 4px 8px;
+}
 textarea { width: 100%; min-height: 64px; resize: vertical; }
 
 button {

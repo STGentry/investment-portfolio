@@ -14,16 +14,30 @@ def _money(value: float) -> float:
     return 0.0 if value == 0 else value
 
 
-def _add_sector_industry_conditions(
-    conditions: list, params: list, sector: str | None, industry: str | None
+def _normalize_filter(values) -> list[str] | None:
+    """Normalize repeated query values into a lowercase list, or None if empty."""
+    if not values:
+        return None
+    cleaned = [str(value).strip().lower() for value in values if str(value).strip()]
+    return cleaned or None
+
+
+def add_sector_industry_conditions(
+    conditions: list, params: list, sector, industry
 ) -> None:
-    """Append sector/industry filter conditions to an existing WHERE clause."""
-    if sector is not None:
-        conditions.append("LOWER(h.sector) = LOWER(?)")
-        params.append(sector)
-    if industry is not None:
-        conditions.append("LOWER(h.industry) = LOWER(?)")
-        params.append(industry)
+    """Append sector/industry filter conditions to an existing WHERE clause.
+
+    ``sector`` and ``industry`` may each be a single value or a list of values;
+    any of the selected values matches (case-insensitive).
+    """
+    sectors = _normalize_filter(sector)
+    if sectors:
+        conditions.append("LOWER(h.sector) IN (" + ", ".join("?" for _ in sectors) + ")")
+        params.extend(sectors)
+    industries = _normalize_filter(industry)
+    if industries:
+        conditions.append("LOWER(h.industry) IN (" + ", ".join("?" for _ in industries) + ")")
+        params.extend(industries)
 
 
 def latest_price(conn, symbol: str, fallback: float | None = None) -> float | None:
@@ -101,12 +115,12 @@ def get_holding(conn, symbol: str) -> dict:
 
 
 def _owner_holding_rows(
-    conn, owner_id: int, sector: str | None = None, industry: str | None = None
+    conn, owner_id: int, sector=None, industry=None
 ) -> list[dict]:
     """Account-level holdings with the owner's attributed share of each position."""
     conditions = ["ho.owner_id = ?"]
     params = [owner_id]
-    _add_sector_industry_conditions(conditions, params, sector, industry)
+    add_sector_industry_conditions(conditions, params, sector, industry)
     sql = """
         SELECT h.holding_id, h.symbol, h.quantity, h.entry_price, h.cost_basis,
                h.sector, h.industry, h.dividend_amount, h.dividend_frequency,
@@ -171,13 +185,13 @@ def summarize(records: list[dict]) -> dict:
 
 
 def get_portfolio_summary(
-    sector: str | None = None, industry: str | None = None
+    sector=None, industry=None
 ) -> dict:
     """Portfolio-wide summary across all account holdings (no double counting)."""
     with db() as conn:
         conditions = []
         params = []
-        _add_sector_industry_conditions(conditions, params, sector, industry)
+        add_sector_industry_conditions(conditions, params, sector, industry)
         sql = """
             SELECT h.holding_id, h.symbol, h.quantity, h.entry_price, h.cost_basis,
                    h.sector, h.industry, h.dividend_amount, h.dividend_frequency,
@@ -193,7 +207,7 @@ def get_portfolio_summary(
 
 
 def get_owner_summary(
-    owner_id: int, sector: str | None = None, industry: str | None = None
+    owner_id: int, sector=None, industry=None
 ) -> dict:
     """Summary for a single owner using their attributed share of each position."""
     with db() as conn:

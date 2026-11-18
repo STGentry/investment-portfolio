@@ -3,12 +3,12 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 
 from database import init_db
 from models import Summary
-from .routes import holdings, owners, trades
+from .routes import holdings, owners, prices, trades
 from .services import analytics
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -32,13 +32,14 @@ app = FastAPI(
 app.include_router(owners.router, prefix="/api/v1", tags=["owners"])
 app.include_router(holdings.router, prefix="/api/v1", tags=["holdings"])
 app.include_router(trades.router, prefix="/api/v1", tags=["trades"])
+app.include_router(prices.router, prefix="/api/v1", tags=["prices"])
 
 
 @app.get("/api/v1/analytics/summary", response_model=Summary)
 def portfolio_summary(
     owner_id: int | None = None,
-    sector: str | None = None,
-    industry: str | None = None,
+    sector: list[str] | None = Query(None),
+    industry: list[str] | None = Query(None),
 ):
     """Portfolio summary for all owners, or for a single owner."""
     if owner_id is None:

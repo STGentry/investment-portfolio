@@ -1,12 +1,11 @@
 # Investment Portfolio Web App
 
 A local web application for tracking an investment portfolio. It runs on a single
-machine (the "app server") and stores data in SQLite. A separate Ollama server on
-the local network is reserved for future ML analysis (not implemented yet).
+machine (the "app server") and stores data in SQLite. 
 
 ## Features
 
-- Single brokerage account with multiple owners (Dad, Emmett) sharing positions by percentage
+- Single brokerage account with multiple owners sharing positions by percentage
 - Fractional share quantities
 - Full audit trail of all buy/sell/dividend trades
 - Data migration from a Google Sheets CSV export
@@ -54,9 +53,6 @@ Open <http://localhost:8000> for the dashboard.
 `.env` (loaded by `config.py`):
 
 ```env
-# Future Ollama integration (not used yet)
-OLLAMA_API_URL=http://localhost:11434
-
 # Local database path
 DB_PATH=portfolio.db
 ```
@@ -69,7 +65,7 @@ Base URL: `http://localhost:8000/api/v1`
 | --- | --- | --- |
 | GET | `/owners` | List all owners |
 | GET | `/owners/{owner_id}` | Get owner details |
-| GET | `/holdings` | List positions (`?owner_id=`, `?sector=`, `?industry=`, `?sort_by=`) |
+| GET | `/holdings` | List positions (`?owner_id=`, `?sector=` (repeatable), `?industry=` (repeatable), `?sort_by=`) |
 | GET | `/holdings/{symbol}` | Get one position |
 | POST | `/holdings` | Create/upsert position |
 | PUT | `/holdings/{symbol}` | Update position fields |
@@ -84,7 +80,8 @@ Base URL: `http://localhost:8000/api/v1`
 | GET | `/holdings/{symbol}/trades` | Trades by symbol |
 | GET | `/analytics/summary` | Portfolio summary (all owners) |
 | GET | `/analytics/summary?owner_id=1` | Summary for one owner |
-| GET | `/analytics/summary?sector=&industry=` | Summary filtered by sector and/or industry |
+| GET | `/analytics/summary?sector=&industry=` | Summary filtered by sector and/or industry (repeatable params match any selection) |
+| POST | `/prices/update` | Refresh latest close prices for all holdings via Yahoo Finance (yfinance) |
 
 
 ## Project Structure

@@ -27,11 +27,14 @@
       </div>
       <div class="toolbar-item">
         <label for="sector-select">Sector</label>
-        <select id="sector-select"></select>
+        <select id="sector-select" multiple></select>
       </div>
       <div class="toolbar-item">
         <label for="industry-select">Industry</label>
-        <select id="industry-select"></select>
+        <select id="industry-select" multiple></select>
+      </div>
+      <div class="toolbar-item toolbar-actions">
+        <button id="update-prices" type="button">Update Prices</button>
       </div>
     </div>
 
@@ -104,6 +107,19 @@ async function putJson(url, payload) {
   return body;
 }
 
+async function postJson(url, payload) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: payload ? JSON.stringify(payload) : undefined,
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(body.detail || 'Request failed: ' + res.status + ' ' + url);
+  }
+  return body;
+}
+
 function fmtMoney(v) {
   const negative = v < 0;
   const text = Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -139,8 +155,8 @@ function showMessage(text, kind) {
 }
 
 let selectedOwner = 'all';
-let selectedSector = '';
-let selectedIndustry = '';
+let selectedSectors = [];
+let selectedIndustries = [];
 
 async function loadOwners() {
   const owners = await fetchJson(API + '/owners');
@@ -174,6 +190,8 @@ function populateFilter(selectId, values, placeholder) {
   const allOption = document.createElement('option');
   allOption.value = '';
   allOption.textContent = placeholder;
+  allOption.disabled = true;
+  allOption.selected = true;
   select.appendChild(allOption);
   for (const value of values) {
     const option = document.createElement('option');
@@ -183,29 +201,54 @@ function populateFilter(selectId, values, placeholder) {
   }
 }
 
+function readMultiSelect(select) {
+  return Array.from(select.selectedOptions)
+    .map((option) => option.value)
+    .filter((value) => value !== '');
+}
+
+function appendFilterValues(params, name, values) {
+  for (const value of values) {
+    params.push(name + '=' + encodeURIComponent(value));
+  }
+}
+
 function filterQuery() {
   const params = [];
   if (selectedOwner !== 'all') {
     params.push('owner_id=' + selectedOwner);
   }
-  if (selectedSector) {
-    params.push('sector=' + encodeURIComponent(selectedSector));
-  }
-  if (selectedIndustry) {
-    params.push('industry=' + encodeURIComponent(selectedIndustry));
-  }
+  appendFilterValues(params, 'sector', selectedSectors);
+  appendFilterValues(params, 'industry', selectedIndustries);
   return params.length ? '?' + params.join('&') : '';
 }
 
 document.getElementById('sector-select').addEventListener('change', (event) => {
-  selectedSector = event.target.value;
+  selectedSectors = readMultiSelect(event.target);
   load();
 });
 
 document.getElementById('industry-select').addEventListener('change', (event) => {
-  selectedIndustry = event.target.value;
+  selectedIndustries = readMultiSelect(event.target);
   load();
 });
+
+async function updatePrices() {
+  const button = document.getElementById('update-prices');
+  button.disabled = true;
+  showMessage('Fetching latest prices from Yahoo Finance...', '');
+  try {
+    const result = await postJson(API + '/prices/update');
+    await load();
+    showMessage(result.message + '.', 'success');
+  } catch (error) {
+    showMessage(error.message, 'error');
+  } finally {
+    button.disabled = false;
+  }
+}
+
+document.getElementById('update-prices').addEventListener('click', updatePrices);
 
 async function load() {
   const query = filterQuery();

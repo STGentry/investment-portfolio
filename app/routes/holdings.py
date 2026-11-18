@@ -1,10 +1,15 @@
 """Holding, owner-split, and valuation endpoints."""
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from database import db
 from models import HoldingCreate, HoldingOwnerCreate, HoldingRead, HoldingUpdate
-from ..services.analytics import get_holding, get_splits, latest_price
+from ..services.analytics import (
+    add_sector_industry_conditions,
+    get_holding,
+    get_splits,
+    latest_price,
+)
 
 router = APIRouter()
 
@@ -59,8 +64,8 @@ def _serialize_splits(conn, symbol: str) -> list[dict]:
 @router.get("/holdings", response_model=list[HoldingRead])
 def list_holdings(
     owner_id: int | None = None,
-    sector: str | None = None,
-    industry: str | None = None,
+    sector: list[str] | None = Query(None),
+    industry: list[str] | None = Query(None),
     sort_by: str = "symbol",
 ) -> list[HoldingRead]:
     """List positions with optional owner/sector/industry filters and sorting."""
@@ -79,12 +84,7 @@ def list_holdings(
                 "WHERE ho.owner_id = ?)"
             )
             params.append(owner_id)
-        if sector is not None:
-            conditions.append("LOWER(h.sector) = LOWER(?)")
-            params.append(sector)
-        if industry is not None:
-            conditions.append("LOWER(h.industry) = LOWER(?)")
-            params.append(industry)
+        add_sector_industry_conditions(conditions, params, sector, industry)
         sql = "SELECT symbol FROM holdings h"
         if conditions:
             sql += " WHERE " + " AND ".join(conditions)
