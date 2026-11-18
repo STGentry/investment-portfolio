@@ -90,6 +90,7 @@ select, input, textarea {
 }
 input[type="number"], input[type="text"] { width: 100%; }
 input[type="number"] { width: 120px; }
+.quantity-input { width: 90px; }
 select { width: auto; min-width: 150px; }
 textarea { width: 100%; min-height: 64px; resize: vertical; }
 
@@ -108,10 +109,12 @@ button.secondary { background: var(--surface); color: var(--accent); }
 button.secondary:hover { background: #eef2f6; }
 button.danger { background: var(--negative); border-color: var(--negative); }
 button.danger:hover { background: #8f1f18; border-color: #8f1f18; }
+button.tiny { padding: 4px 10px; font-size: 12px; }
 
 .message { padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; font-weight: 600; }
 .message.success { background: #e6f4ea; color: #0b5c2e; border: 1px solid #b7e0c4; }
 .message.error { background: #fdecea; color: #8f1f18; border: 1px solid #f5c2c0; }
+.message:empty { display: none; }
 
 table.data {
   width: 100%;

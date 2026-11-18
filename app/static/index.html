@@ -27,6 +27,8 @@
       </div>
     </div>
 
+    <div class="message" id="message"></div>
+
     <div class="card-grid">
       <div class="card">
         <div class="label">Total Positions</div>
@@ -78,6 +80,19 @@ async function fetchJson(url) {
   return res.json();
 }
 
+async function putJson(url, payload) {
+  const res = await fetch(url, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(body.detail || 'Request failed: ' + res.status + ' ' + url);
+  }
+  return body;
+}
+
 function fmtMoney(v) {
   const negative = v < 0;
   const text = Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -104,6 +119,13 @@ function esc(value) {
 }
 
 function valueClass(v) { return v >= 0 ? 'positive' : 'negative'; }
+
+const messageBox = document.getElementById('message');
+
+function showMessage(text, kind) {
+  messageBox.className = 'message ' + kind;
+  messageBox.textContent = text;
+}
 
 let selectedOwner = 'all';
 
@@ -171,7 +193,7 @@ function renderHoldings(rows) {
       pl = row.unrealized_pl;
       plClass = valueClass(row.unrealized_pl);
     } else {
-      quantity = split.shares;
+      quantity = row.quantity;
       splitText = fmtNum(split.percentage, 2) + '%';
       costBasis = split.cost_basis;
       currentValue = split.shares * (row.current_price || 0);
@@ -179,9 +201,11 @@ function renderHoldings(rows) {
       plClass = valueClass(pl);
     }
     const price = row.current_price == null ? '\u2014' : fmtMoney(row.current_price);
-    return '<tr>' +
+    return '<tr data-symbol="' + esc(row.symbol) + '">' +
       '<td><strong>' + esc(row.symbol) + '</strong></td>' +
-      '<td class="num">' + fmtQty(quantity) + '</td>' +
+      '<td class="num"><input type="number" step="any" min="0" class="quantity-input" ' +
+        'data-symbol="' + esc(row.symbol) + '" value="' + fmtQty(row.quantity) + '"> ' +
+        '<button type="button" class="tiny" data-save-quantity="' + esc(row.symbol) + '">Save</button></td>' +
       '<td>' + splitText + '</td>' +
       '<td class="num">' + fmtMoney(costBasis) + '</td>' +
       '<td class="num">' + price + '</td>' +
@@ -191,6 +215,40 @@ function renderHoldings(rows) {
       '</tr>';
   }).join('');
 }
+
+async function saveQuantity(symbol) {
+  const input = document.querySelector('input.quantity-input[data-symbol="' + symbol + '"]');
+  const quantity = input ? Number(input.value) : NaN;
+  if (!Number.isFinite(quantity) || quantity <= 0) {
+    showMessage('Quantity must be greater than zero.', 'error');
+    return;
+  }
+  showMessage('Saving ' + symbol + '...', '');
+  try {
+    await putJson(API + '/holdings/' + symbol, { quantity });
+    await load();
+    showMessage('Quantity for ' + symbol + ' saved.', 'success');
+  } catch (error) {
+    showMessage(error.message, 'error');
+  }
+}
+
+document.getElementById('holdings-body').addEventListener('click', (event) => {
+  const button = event.target.closest('button[data-save-quantity]');
+  if (button) {
+    saveQuantity(button.dataset.saveQuantity);
+  }
+});
+
+document.getElementById('holdings-body').addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter') {
+    return;
+  }
+  const input = event.target.closest('input.quantity-input');
+  if (input) {
+    saveQuantity(input.dataset.symbol);
+  }
+});
 
 loadOwners().then(load);
 </script>

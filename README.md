@@ -43,6 +43,9 @@ owners table is already populated.
 ```bash
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
+```powershell
+PS C:\Users\g3ntr\Source\Repos\investment-portfolio> Start-Process -FilePath "py" -ArgumentList "-3.11","-m","uvicorn","app.main:app","--host","0.0.0.0","--port","8000" -WorkingDirectory (Get-Location) -RedirectStandardOutput "server.log" -RedirectStandardError "server.err.log" -NoNewWindow; Start-Sleep -Seconds 4; echo "=== server.err.log ==="; Get-Content server.err.log -Tail 20; echo "=== server.log ==="; Get-Content server.log -Tail 10
+```
 
 Open <http://localhost:8000> for the dashboard.
 
@@ -82,17 +85,6 @@ Base URL: `http://localhost:8000/api/v1`
 | GET | `/analytics/summary` | Portfolio summary (all owners) |
 | GET | `/analytics/summary?owner_id=1` | Summary for one owner |
 
-## Testing
-
-`tests/verify_app.py` is an end-to-end check covering the handoff testing
-checklist (migration data, dashboard totals, buy/sell trades, split
-recalculation, and every documented endpoint). Start the server first, then run:
-
-```bash
-py -3.11 tests/verify_app.py
-```
-
-Expected result: `64 passed, 0 failed`.
 
 ## Project Structure
 
@@ -103,7 +95,6 @@ investment-portfolio/
 ├── config.py                  # Configuration loader
 ├── database.py                # DB connection + schema init
 ├── models.py                  # Pydantic request/response schemas
-├── migrate.py                 # Data migration script
 ├── tests/
 │   └── verify_app.py          # End-to-end API verification script
 ├── app/
@@ -124,11 +115,7 @@ investment-portfolio/
 │       └── css/style.css
 └── data/
     └── seed_portfolio.csv     # Migration source data
+    └── migrate.py             # Data migration script
+    └── migrate_trades.py      # data migration script
+    └── trans_history.csv      # migration source data
 ```
-
-## Known Deferred Items
-
-- Ollama image analysis / candle processing
-- Authentication (local-only app)
-- DRIP transaction tracking
-- Docker/container deployment

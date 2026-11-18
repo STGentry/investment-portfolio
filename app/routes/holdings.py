@@ -146,6 +146,8 @@ def upsert_holding(data: HoldingCreate) -> HoldingRead:
             conn.execute(
                 f"UPDATE holdings SET {', '.join(assignments)} WHERE symbol = ?", params
             )
+            if "quantity" in fields or "cost_basis" in fields:
+                _recalculate_splits(conn, data.symbol)
         record = get_holding(conn, data.symbol)
     return record
 
@@ -167,6 +169,8 @@ def update_holding(symbol: str, data: HoldingUpdate) -> HoldingRead:
         assignments.append("last_updated = datetime('now')")
         params.append(symbol)
         conn.execute(f"UPDATE holdings SET {', '.join(assignments)} WHERE symbol = ?", params)
+        if "quantity" in updates or "cost_basis" in updates:
+            _recalculate_splits(conn, symbol)
         record = get_holding(conn, symbol)
     return record
 
