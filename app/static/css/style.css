@@ -77,8 +77,14 @@ header.page .nav a:hover { background: #eef2f6; text-decoration: none; }
 .card .value.negative { color: var(--negative); }
 .card .sub { font-size: 13px; color: var(--muted); margin-top: 6px; }
 
-.toolbar { margin-bottom: 16px; }
-.toolbar .toolbar-item { margin-right: 16px; }
+.toolbar {
+  margin-bottom: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-end;
+}
+.toolbar .toolbar-item { margin-right: 0; }
 .toolbar label { font-size: 13px; font-weight: 600; display: block; margin-bottom: 4px; }
 select, input, textarea {
   font: inherit;

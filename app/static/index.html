@@ -71,10 +71,11 @@
           <th>Sector</th>
           <th class="num">Dividend Amount</th>
           <th>Dividend Frequency</th>
+          <th>Save</th>
         </tr>
       </thead>
       <tbody id="holdings-body">
-        <tr><td colspan="10" class="empty">Loading holdings...</td></tr>
+        <tr><td colspan="11" class="empty">Loading holdings...</td></tr>
       </tbody>
     </table>
   </div>
@@ -237,7 +238,7 @@ function renderSummary(summary) {
 function renderHoldings(rows) {
   const tbody = document.getElementById('holdings-body');
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="10" class="empty">No holdings found.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" class="empty">No holdings found.</td></tr>';
     return;
   }
   tbody.innerHTML = rows.map((row) => {
@@ -265,8 +266,7 @@ function renderHoldings(rows) {
     return '<tr data-symbol="' + symbol + '">' +
       '<td><strong>' + symbol + '</strong></td>' +
       '<td class="num"><input type="number" step="any" min="0" class="quantity-input" ' +
-        'data-symbol="' + symbol + '" data-field="quantity" value="' + fmtQty(row.quantity) + '"> ' +
-        '<button type="button" class="secondary" data-save="' + symbol + '" data-field="quantity">Save</button></td>' +
+        'data-symbol="' + symbol + '" value="' + fmtQty(row.quantity) + '"></td>' +
       '<td>' + splitText + '</td>' +
       '<td class="num">' + fmtMoney(costBasis) + '</td>' +
       '<td class="num">' + price + '</td>' +
@@ -274,64 +274,48 @@ function renderHoldings(rows) {
       '<td class="num ' + plClass + '">' + fmtMoney(pl) + '</td>' +
       '<td>' + esc(row.sector || '\u2014') + '</td>' +
       '<td class="num"><input type="number" step="any" min="0" class="dividend-amount-input" ' +
-        'data-symbol="' + symbol + '" data-field="dividend_amount" value="' + fmtNum(dividendAmount, 2) + '"> ' +
-        '<button type="button" class="secondary" data-save="' + symbol + '" data-field="dividend_amount">Save</button></td>' +
+        'data-symbol="' + symbol + '" value="' + fmtNum(dividendAmount, 2) + '"></td>' +
       '<td><input type="text" class="dividend-frequency-input" ' +
-        'data-symbol="' + symbol + '" data-field="dividend_frequency" value="' + esc(dividendFrequency) + '"> ' +
-        '<button type="button" class="secondary" data-save="' + symbol + '" data-field="dividend_frequency">Save</button></td>' +
+        'data-symbol="' + symbol + '" value="' + esc(dividendFrequency) + '"></td>' +
+      '<td><button type="button" class="secondary" data-save="' + symbol + '">Save</button></td>' +
       '</tr>';
   }).join('');
 }
 
-function fieldLabel(field) {
-  if (field === 'quantity') {
-    return 'Quantity';
-  }
-  if (field === 'dividend_amount') {
-    return 'Dividend amount';
-  }
-  if (field === 'dividend_frequency') {
-    return 'Dividend frequency';
-  }
-  return field;
-}
-
-async function saveField(symbol, field) {
+async function saveRow(symbol) {
   const row = document.querySelector('tr[data-symbol="' + symbol + '"]');
   if (!row) {
     return;
   }
 
-  let payload;
-  if (field === 'quantity') {
-    const input = row.querySelector('input.quantity-input');
-    const quantity = input ? Number(input.value) : NaN;
-    if (!Number.isFinite(quantity) || quantity <= 0) {
-      showMessage('Quantity must be greater than zero.', 'error');
-      return;
-    }
-    payload = { quantity };
-  } else if (field === 'dividend_amount') {
-    const input = row.querySelector('input.dividend-amount-input');
-    const amount = input ? Number(input.value) : NaN;
-    if (!Number.isFinite(amount) || amount < 0) {
-      showMessage('Dividend amount cannot be negative.', 'error');
-      return;
-    }
-    payload = { dividend_amount: amount };
-  } else if (field === 'dividend_frequency') {
-    const input = row.querySelector('input.dividend-frequency-input');
-    const frequency = input ? input.value.trim() : '';
-    payload = { dividend_frequency: frequency || 'none' };
-  } else {
+  const quantityInput = row.querySelector('input.quantity-input');
+  const amountInput = row.querySelector('input.dividend-amount-input');
+  const frequencyInput = row.querySelector('input.dividend-frequency-input');
+
+  const quantity = quantityInput ? Number(quantityInput.value) : NaN;
+  if (!Number.isFinite(quantity) || quantity <= 0) {
+    showMessage('Quantity must be greater than zero.', 'error');
     return;
   }
+
+  const amount = amountInput ? Number(amountInput.value) : NaN;
+  if (!Number.isFinite(amount) || amount < 0) {
+    showMessage('Dividend amount cannot be negative.', 'error');
+    return;
+  }
+
+  const frequency = frequencyInput ? frequencyInput.value.trim() : '';
+  const payload = {
+    quantity: quantity,
+    dividend_amount: amount,
+    dividend_frequency: frequency || 'none',
+  };
 
   showMessage('Saving ' + symbol + '...', '');
   try {
     await putJson(API + '/holdings/' + symbol, payload);
     await load();
-    showMessage(fieldLabel(field) + ' for ' + symbol + ' saved.', 'success');
+    showMessage('Holdings for ' + symbol + ' saved.', 'success');
   } catch (error) {
     showMessage(error.message, 'error');
   }
@@ -340,7 +324,7 @@ async function saveField(symbol, field) {
 document.getElementById('holdings-body').addEventListener('click', (event) => {
   const button = event.target.closest('button[data-save]');
   if (button) {
-    saveField(button.dataset.save, button.dataset.field);
+    saveRow(button.dataset.save);
   }
 });
 
@@ -348,9 +332,9 @@ document.getElementById('holdings-body').addEventListener('keydown', (event) => 
   if (event.key !== 'Enter') {
     return;
   }
-  const input = event.target.closest('input[data-field]');
+  const input = event.target.closest('input[data-symbol]');
   if (input) {
-    saveField(input.dataset.symbol, input.dataset.field);
+    saveRow(input.dataset.symbol);
   }
 });
 
@@ -359,7 +343,7 @@ loadOwners()
   .then(load)
   .catch((error) => {
     document.getElementById('holdings-body').innerHTML =
-      '<tr><td colspan="10" class="empty">' + esc(error.message) + '</td></tr>';
+      '<tr><td colspan="11" class="empty">' + esc(error.message) + '</td></tr>';
   });
 </script>
 </body>
