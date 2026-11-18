@@ -91,6 +91,8 @@ select, input, textarea {
 input[type="number"], input[type="text"] { width: 100%; }
 input[type="number"] { width: 120px; }
 .quantity-input { width: 90px; }
+.dividend-amount-input { width: 90px; }
+.dividend-frequency-input { width: 130px; }
 select { width: auto; min-width: 150px; }
 textarea { width: 100%; min-height: 64px; resize: vertical; }
 

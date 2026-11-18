@@ -60,29 +60,35 @@ def _serialize_splits(conn, symbol: str) -> list[dict]:
 def list_holdings(
     owner_id: int | None = None,
     sector: str | None = None,
+    industry: str | None = None,
     sort_by: str = "symbol",
 ) -> list[HoldingRead]:
-    """List positions with optional owner/sector filters and sorting."""
+    """List positions with optional owner/sector/industry filters and sorting."""
     if sort_by not in SORTABLE_FIELDS:
         raise HTTPException(
             status_code=400,
             detail=f"Invalid sort_by '{sort_by}'. Allowed: {', '.join(sorted(SORTABLE_FIELDS))}",
         )
     with db() as conn:
-        symbols = conn.execute("SELECT symbol FROM holdings").fetchall()
+        conditions = []
+        params = []
         if owner_id is not None:
-            symbols = conn.execute(
-                """
-                SELECT DISTINCT h.symbol FROM holdings h
-                JOIN holding_owners ho ON ho.holding_id = h.holding_id
-                WHERE ho.owner_id = ?
-                """,
-                (owner_id,),
-            ).fetchall()
+            conditions.append(
+                "h.symbol IN (SELECT DISTINCT h2.symbol FROM holdings h2 "
+                "JOIN holding_owners ho ON ho.holding_id = h2.holding_id "
+                "WHERE ho.owner_id = ?)"
+            )
+            params.append(owner_id)
         if sector is not None:
-            symbols = conn.execute(
-                "SELECT symbol FROM holdings WHERE LOWER(sector) = LOWER(?)", (sector,)
-            ).fetchall()
+            conditions.append("LOWER(h.sector) = LOWER(?)")
+            params.append(sector)
+        if industry is not None:
+            conditions.append("LOWER(h.industry) = LOWER(?)")
+            params.append(industry)
+        sql = "SELECT symbol FROM holdings h"
+        if conditions:
+            sql += " WHERE " + " AND ".join(conditions)
+        symbols = conn.execute(sql, params).fetchall()
 
         records = [get_holding(conn, row["symbol"]) for row in symbols]
         key = SORTABLE_FIELDS[sort_by]

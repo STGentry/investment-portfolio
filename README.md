@@ -69,7 +69,7 @@ Base URL: `http://localhost:8000/api/v1`
 | --- | --- | --- |
 | GET | `/owners` | List all owners |
 | GET | `/owners/{owner_id}` | Get owner details |
-| GET | `/holdings` | List positions (`?owner_id=`, `?sector=`, `?sort_by=`) |
+| GET | `/holdings` | List positions (`?owner_id=`, `?sector=`, `?industry=`, `?sort_by=`) |
 | GET | `/holdings/{symbol}` | Get one position |
 | POST | `/holdings` | Create/upsert position |
 | PUT | `/holdings/{symbol}` | Update position fields |
@@ -84,6 +84,7 @@ Base URL: `http://localhost:8000/api/v1`
 | GET | `/holdings/{symbol}/trades` | Trades by symbol |
 | GET | `/analytics/summary` | Portfolio summary (all owners) |
 | GET | `/analytics/summary?owner_id=1` | Summary for one owner |
+| GET | `/analytics/summary?sector=&industry=` | Summary filtered by sector and/or industry |
 
 
 ## Project Structure

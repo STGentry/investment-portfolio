@@ -35,11 +35,15 @@ app.include_router(trades.router, prefix="/api/v1", tags=["trades"])
 
 
 @app.get("/api/v1/analytics/summary", response_model=Summary)
-def portfolio_summary(owner_id: int | None = None):
+def portfolio_summary(
+    owner_id: int | None = None,
+    sector: str | None = None,
+    industry: str | None = None,
+):
     """Portfolio summary for all owners, or for a single owner."""
     if owner_id is None:
-        return analytics.get_portfolio_summary()
-    summary = analytics.get_owner_summary(owner_id)
+        return analytics.get_portfolio_summary(sector=sector, industry=industry)
+    summary = analytics.get_owner_summary(owner_id, sector=sector, industry=industry)
     if not summary:
         raise HTTPException(status_code=404, detail=f"Owner {owner_id} not found")
     return summary

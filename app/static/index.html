@@ -25,6 +25,14 @@
         <label for="owner-select">Owner</label>
         <select id="owner-select"></select>
       </div>
+      <div class="toolbar-item">
+        <label for="sector-select">Sector</label>
+        <select id="sector-select"></select>
+      </div>
+      <div class="toolbar-item">
+        <label for="industry-select">Industry</label>
+        <select id="industry-select"></select>
+      </div>
     </div>
 
     <div class="message" id="message"></div>
@@ -61,10 +69,12 @@
           <th class="num">Current Value</th>
           <th class="num">Unrealized P&amp;L</th>
           <th>Sector</th>
+          <th class="num">Dividend Amount</th>
+          <th>Dividend Frequency</th>
         </tr>
       </thead>
       <tbody id="holdings-body">
-        <tr><td colspan="8" class="empty">Loading holdings...</td></tr>
+        <tr><td colspan="10" class="empty">Loading holdings...</td></tr>
       </tbody>
     </table>
   </div>
@@ -128,6 +138,8 @@ function showMessage(text, kind) {
 }
 
 let selectedOwner = 'all';
+let selectedSector = '';
+let selectedIndustry = '';
 
 async function loadOwners() {
   const owners = await fetchJson(API + '/owners');
@@ -148,16 +160,62 @@ async function loadOwners() {
   });
 }
 
+async function loadFilters() {
+  const holdings = await fetchJson(API + '/holdings');
+  const sectors = [...new Set(holdings.map((h) => h.sector).filter(Boolean))].sort();
+  const industries = [...new Set(holdings.map((h) => h.industry).filter(Boolean))].sort();
+  populateFilter('sector-select', sectors, 'All sectors');
+  populateFilter('industry-select', industries, 'All industries');
+}
+
+function populateFilter(selectId, values, placeholder) {
+  const select = document.getElementById(selectId);
+  const allOption = document.createElement('option');
+  allOption.value = '';
+  allOption.textContent = placeholder;
+  select.appendChild(allOption);
+  for (const value of values) {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = value;
+    select.appendChild(option);
+  }
+}
+
+function filterQuery() {
+  const params = [];
+  if (selectedOwner !== 'all') {
+    params.push('owner_id=' + selectedOwner);
+  }
+  if (selectedSector) {
+    params.push('sector=' + encodeURIComponent(selectedSector));
+  }
+  if (selectedIndustry) {
+    params.push('industry=' + encodeURIComponent(selectedIndustry));
+  }
+  return params.length ? '?' + params.join('&') : '';
+}
+
+document.getElementById('sector-select').addEventListener('change', (event) => {
+  selectedSector = event.target.value;
+  load();
+});
+
+document.getElementById('industry-select').addEventListener('change', (event) => {
+  selectedIndustry = event.target.value;
+  load();
+});
+
 async function load() {
-  const param = selectedOwner === 'all' ? '' : '?owner_id=' + selectedOwner;
+  const query = filterQuery();
   try {
-    const summary = await fetchJson(API + '/analytics/summary' + param);
+    const summary = await fetchJson(API + '/analytics/summary' + query);
     renderSummary(summary);
-    const holdings = await fetchJson(API + '/holdings' + param);
+    const holdings = await fetchJson(API + '/holdings' + query);
     renderHoldings(holdings);
   } catch (error) {
     document.getElementById('holdings-body').innerHTML =
-      '<tr><td colspan="8" class="empty">' + esc(error.message) + '</td></tr>';
+      '<tr><td colspan="10" class="empty">' + esc(error.message) + '</td></tr>';
   }
 }
 
@@ -179,7 +237,7 @@ function renderSummary(summary) {
 function renderHoldings(rows) {
   const tbody = document.getElementById('holdings-body');
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="8" class="empty">No holdings found.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" class="empty">No holdings found.</td></tr>';
     return;
   }
   tbody.innerHTML = rows.map((row) => {
@@ -201,42 +259,88 @@ function renderHoldings(rows) {
       plClass = valueClass(pl);
     }
     const price = row.current_price == null ? '\u2014' : fmtMoney(row.current_price);
-    return '<tr data-symbol="' + esc(row.symbol) + '">' +
-      '<td><strong>' + esc(row.symbol) + '</strong></td>' +
+    const dividendAmount = row.dividend_amount == null ? 0 : row.dividend_amount;
+    const dividendFrequency = row.dividend_frequency || 'none';
+    const symbol = esc(row.symbol);
+    return '<tr data-symbol="' + symbol + '">' +
+      '<td><strong>' + symbol + '</strong></td>' +
       '<td class="num"><input type="number" step="any" min="0" class="quantity-input" ' +
-        'data-symbol="' + esc(row.symbol) + '" value="' + fmtQty(row.quantity) + '"> ' +
-        '<button type="button" class="tiny" data-save-quantity="' + esc(row.symbol) + '">Save</button></td>' +
+        'data-symbol="' + symbol + '" data-field="quantity" value="' + fmtQty(row.quantity) + '"> ' +
+        '<button type="button" class="secondary" data-save="' + symbol + '" data-field="quantity">Save</button></td>' +
       '<td>' + splitText + '</td>' +
       '<td class="num">' + fmtMoney(costBasis) + '</td>' +
       '<td class="num">' + price + '</td>' +
       '<td class="num">' + fmtMoney(currentValue) + '</td>' +
       '<td class="num ' + plClass + '">' + fmtMoney(pl) + '</td>' +
       '<td>' + esc(row.sector || '\u2014') + '</td>' +
+      '<td class="num"><input type="number" step="any" min="0" class="dividend-amount-input" ' +
+        'data-symbol="' + symbol + '" data-field="dividend_amount" value="' + fmtNum(dividendAmount, 2) + '"> ' +
+        '<button type="button" class="secondary" data-save="' + symbol + '" data-field="dividend_amount">Save</button></td>' +
+      '<td><input type="text" class="dividend-frequency-input" ' +
+        'data-symbol="' + symbol + '" data-field="dividend_frequency" value="' + esc(dividendFrequency) + '"> ' +
+        '<button type="button" class="secondary" data-save="' + symbol + '" data-field="dividend_frequency">Save</button></td>' +
       '</tr>';
   }).join('');
 }
 
-async function saveQuantity(symbol) {
-  const input = document.querySelector('input.quantity-input[data-symbol="' + symbol + '"]');
-  const quantity = input ? Number(input.value) : NaN;
-  if (!Number.isFinite(quantity) || quantity <= 0) {
-    showMessage('Quantity must be greater than zero.', 'error');
+function fieldLabel(field) {
+  if (field === 'quantity') {
+    return 'Quantity';
+  }
+  if (field === 'dividend_amount') {
+    return 'Dividend amount';
+  }
+  if (field === 'dividend_frequency') {
+    return 'Dividend frequency';
+  }
+  return field;
+}
+
+async function saveField(symbol, field) {
+  const row = document.querySelector('tr[data-symbol="' + symbol + '"]');
+  if (!row) {
     return;
   }
+
+  let payload;
+  if (field === 'quantity') {
+    const input = row.querySelector('input.quantity-input');
+    const quantity = input ? Number(input.value) : NaN;
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      showMessage('Quantity must be greater than zero.', 'error');
+      return;
+    }
+    payload = { quantity };
+  } else if (field === 'dividend_amount') {
+    const input = row.querySelector('input.dividend-amount-input');
+    const amount = input ? Number(input.value) : NaN;
+    if (!Number.isFinite(amount) || amount < 0) {
+      showMessage('Dividend amount cannot be negative.', 'error');
+      return;
+    }
+    payload = { dividend_amount: amount };
+  } else if (field === 'dividend_frequency') {
+    const input = row.querySelector('input.dividend-frequency-input');
+    const frequency = input ? input.value.trim() : '';
+    payload = { dividend_frequency: frequency || 'none' };
+  } else {
+    return;
+  }
+
   showMessage('Saving ' + symbol + '...', '');
   try {
-    await putJson(API + '/holdings/' + symbol, { quantity });
+    await putJson(API + '/holdings/' + symbol, payload);
     await load();
-    showMessage('Quantity for ' + symbol + ' saved.', 'success');
+    showMessage(fieldLabel(field) + ' for ' + symbol + ' saved.', 'success');
   } catch (error) {
     showMessage(error.message, 'error');
   }
 }
 
 document.getElementById('holdings-body').addEventListener('click', (event) => {
-  const button = event.target.closest('button[data-save-quantity]');
+  const button = event.target.closest('button[data-save]');
   if (button) {
-    saveQuantity(button.dataset.saveQuantity);
+    saveField(button.dataset.save, button.dataset.field);
   }
 });
 
@@ -244,13 +348,19 @@ document.getElementById('holdings-body').addEventListener('keydown', (event) => 
   if (event.key !== 'Enter') {
     return;
   }
-  const input = event.target.closest('input.quantity-input');
+  const input = event.target.closest('input[data-field]');
   if (input) {
-    saveQuantity(input.dataset.symbol);
+    saveField(input.dataset.symbol, input.dataset.field);
   }
 });
 
-loadOwners().then(load);
+loadOwners()
+  .then(loadFilters)
+  .then(load)
+  .catch((error) => {
+    document.getElementById('holdings-body').innerHTML =
+      '<tr><td colspan="10" class="empty">' + esc(error.message) + '</td></tr>';
+  });
 </script>
 </body>
 </html>

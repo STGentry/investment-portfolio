@@ -14,6 +14,18 @@ def _money(value: float) -> float:
     return 0.0 if value == 0 else value
 
 
+def _add_sector_industry_conditions(
+    conditions: list, params: list, sector: str | None, industry: str | None
+) -> None:
+    """Append sector/industry filter conditions to an existing WHERE clause."""
+    if sector is not None:
+        conditions.append("LOWER(h.sector) = LOWER(?)")
+        params.append(sector)
+    if industry is not None:
+        conditions.append("LOWER(h.industry) = LOWER(?)")
+        params.append(industry)
+
+
 def latest_price(conn, symbol: str, fallback: float | None = None) -> float | None:
     """Return the most recent close price for a symbol, or a fallback value."""
     row = conn.execute(
@@ -88,20 +100,23 @@ def get_holding(conn, symbol: str) -> dict:
     return _holding_record(conn, row, get_splits(conn, row["holding_id"]))
 
 
-def _owner_holding_rows(conn, owner_id: int) -> list[dict]:
+def _owner_holding_rows(
+    conn, owner_id: int, sector: str | None = None, industry: str | None = None
+) -> list[dict]:
     """Account-level holdings with the owner's attributed share of each position."""
-    rows = conn.execute(
-        """
+    conditions = ["ho.owner_id = ?"]
+    params = [owner_id]
+    _add_sector_industry_conditions(conditions, params, sector, industry)
+    sql = """
         SELECT h.holding_id, h.symbol, h.quantity, h.entry_price, h.cost_basis,
                h.sector, h.industry, h.dividend_amount, h.dividend_frequency,
                h.last_updated, ho.percentage, ho.shares, ho.cost_basis AS split_cost_basis
         FROM holdings h
         JOIN holding_owners ho ON ho.holding_id = h.holding_id
-        WHERE ho.owner_id = ?
+        WHERE """ + " AND ".join(conditions) + """
         ORDER BY h.symbol
-        """,
-        (owner_id,),
-    ).fetchall()
+        """
+    rows = conn.execute(sql, params).fetchall()
 
     records = []
     for row in rows:
@@ -155,23 +170,31 @@ def summarize(records: list[dict]) -> dict:
     }
 
 
-def get_portfolio_summary() -> dict:
+def get_portfolio_summary(
+    sector: str | None = None, industry: str | None = None
+) -> dict:
     """Portfolio-wide summary across all account holdings (no double counting)."""
     with db() as conn:
-        rows = conn.execute(
-            """
+        conditions = []
+        params = []
+        _add_sector_industry_conditions(conditions, params, sector, industry)
+        sql = """
             SELECT h.holding_id, h.symbol, h.quantity, h.entry_price, h.cost_basis,
                    h.sector, h.industry, h.dividend_amount, h.dividend_frequency,
                    h.last_updated
             FROM holdings h
-            ORDER BY h.symbol
-            """
-        ).fetchall()
+        """
+        if conditions:
+            sql += " WHERE " + " AND ".join(conditions)
+        sql += " ORDER BY h.symbol"
+        rows = conn.execute(sql, params).fetchall()
         records = [_holding_record(conn, row) for row in rows]
         return summarize(records)
 
 
-def get_owner_summary(owner_id: int) -> dict:
+def get_owner_summary(
+    owner_id: int, sector: str | None = None, industry: str | None = None
+) -> dict:
     """Summary for a single owner using their attributed share of each position."""
     with db() as conn:
         owner = conn.execute(
@@ -179,7 +202,7 @@ def get_owner_summary(owner_id: int) -> dict:
         ).fetchone()
         if owner is None:
             return {}
-        records = _owner_holding_rows(conn, owner_id)
+        records = _owner_holding_rows(conn, owner_id, sector, industry)
         summary = summarize(records)
         summary["owner_id"] = owner_id
         summary["owner_name"] = owner["name"]
