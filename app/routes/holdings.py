@@ -6,6 +6,7 @@ from database import db
 from models import HoldingCreate, HoldingOwnerCreate, HoldingRead, HoldingUpdate
 from ..services.analytics import (
     add_sector_industry_conditions,
+    cost_basis_from_trades,
     get_holding,
     get_splits,
     latest_price,
@@ -109,28 +110,23 @@ def get_holding_by_symbol(symbol: str) -> HoldingRead:
 @router.post("/holdings", response_model=HoldingRead, status_code=201)
 def upsert_holding(data: HoldingCreate) -> HoldingRead:
     """Create or update a position."""
-    entry_price = data.entry_price
-    cost_basis = data.cost_basis
-    if entry_price is None and cost_basis is not None:
-        entry_price = cost_basis / data.quantity
-    if cost_basis is None and entry_price is not None:
-        cost_basis = data.quantity * entry_price
-
     with db() as conn:
         existing = conn.execute(
             "SELECT holding_id FROM holdings WHERE symbol = ?", (data.symbol,)
         ).fetchone()
         if existing is None:
+            cost_basis = data.cost_basis
+            if cost_basis is None:
+                cost_basis = cost_basis_from_trades(conn, data.symbol)
             conn.execute(
                 """
-                INSERT INTO holdings (symbol, quantity, entry_price, cost_basis,
+                INSERT INTO holdings (symbol, quantity, cost_basis,
                                       dividend_amount, dividend_frequency, sector, industry)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     data.symbol,
                     data.quantity,
-                    entry_price,
                     cost_basis,
                     data.dividend_amount,
                     data.dividend_frequency or "none",
@@ -142,7 +138,7 @@ def upsert_holding(data: HoldingCreate) -> HoldingRead:
             fields = data.model_dump(exclude_unset=True)
             assignments = []
             params = []
-            for field in ("quantity", "entry_price", "cost_basis", "dividend_amount",
+            for field in ("quantity", "cost_basis", "dividend_amount",
                           "dividend_frequency", "sector", "industry"):
                 if field in fields:
                     assignments.append(f"{field} = ?")

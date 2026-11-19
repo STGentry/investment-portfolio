@@ -29,12 +29,14 @@ pip install -r requirements.txt
 ## Initialize the database (first run only)
 
 ```bash
-python migrate.py
+python -m data.migrate
+python -m data.migrate_trades
 ```
 
 This imports `data/seed_portfolio.csv` and creates the owners, holdings, ownership
-splits, and today's price snapshots. The script is idempotent: it skips when the
-owners table is already populated.
+splits, and today's price snapshots, then imports `data/trans_history.csv` and
+recomputes each holding's cost basis from the trade prices. Both scripts are
+idempotent: they skip when their data is already present.
 
 ## Run the app
 
@@ -92,6 +94,7 @@ investment-portfolio/
 ├── config.py                  # Configuration loader
 ├── database.py                # DB connection + schema init
 ├── models.py                  # Pydantic request/response schemas
+├── recompute_cost_basis.py    # Recalculate cost basis from the trades table
 ├── tests/
 │   └── verify_app.py          # End-to-end API verification script
 ├── app/

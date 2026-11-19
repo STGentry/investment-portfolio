@@ -27,7 +27,6 @@ class OwnerRead(BaseModel):
 class HoldingCreate(BaseModel):
     symbol: str = Field(..., min_length=1, max_length=10)
     quantity: float = Field(..., gt=0)
-    entry_price: float | None = Field(default=None, ge=0)
     cost_basis: float | None = Field(default=None, ge=0)
     dividend_amount: float = Field(default=0.0, ge=0)
     dividend_frequency: str | None = Field(default=None)
@@ -37,7 +36,6 @@ class HoldingCreate(BaseModel):
 
 class HoldingUpdate(BaseModel):
     quantity: float | None = Field(default=None, gt=0)
-    entry_price: float | None = Field(default=None, ge=0)
     cost_basis: float | None = Field(default=None, ge=0)
     dividend_amount: float | None = Field(default=None, ge=0)
     dividend_frequency: str | None = Field(default=None)
@@ -57,7 +55,6 @@ class HoldingRead(BaseModel):
     holding_id: int
     symbol: str
     quantity: float
-    entry_price: float | None
     cost_basis: float | None
     dividend_amount: float
     dividend_frequency: str | None

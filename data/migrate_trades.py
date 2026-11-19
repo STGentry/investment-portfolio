@@ -1,21 +1,28 @@
 """One-shot migration of the historic trade log into SQLite.
 
-Run with: python migrate_trades.py
+Run with: python -m data.migrate_trades
 
 The CSV has no owner column, so each trade is attributed to the owner with the
 largest current split for that symbol (see _owner_for_symbol). Ties and symbols
 without a split fall back to the lowest owner_id.
+
+After the trades are imported, cost basis is recomputed from the trade prices
+so holdings and splits stay consistent with the trade log.
 """
 
 import argparse
 import csv
+import sys
 from datetime import datetime
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from database import db, init_db
+from recompute_cost_basis import recompute
 
 BASE_DIR = Path(__file__).resolve().parent
-TRADES_CSV = BASE_DIR / "data" / "trans_history.csv"
+TRADES_CSV = BASE_DIR / "trans_history.csv"
 IMPORT_NOTES = "Historic import from trans_history.csv"
 
 
@@ -48,7 +55,7 @@ def _owner_for_symbol(conn, symbol: str) -> int:
 
 
 def migrate(csv_path: str = str(TRADES_CSV), db_path: str | None = None) -> dict:
-    """Import historic trades into the trades table. Idempotent."""
+    """Import historic trades into the trades table, then refresh cost basis."""
     rows = load_rows(csv_path)
     if not rows:
         raise SystemExit(f"No rows found in {csv_path}")
@@ -59,40 +66,44 @@ def migrate(csv_path: str = str(TRADES_CSV), db_path: str | None = None) -> dict
         ).fetchone()["count"]
         if existing:
             print(f"Historic trades already imported ({existing} rows). Skipping.")
-            return {"status": "skipped", "trades": existing}
+            result = {"status": "skipped", "trades": existing}
+        else:
+            inserted = 0
+            for row in rows:
+                trade_type = (row.get("Type") or "").strip().lower()
+                symbol = (row.get("Symbol") or "").strip()
+                if trade_type not in ("buy", "sell", "dividend") or not symbol:
+                    continue
 
-        inserted = 0
-        for row in rows:
-            trade_type = (row.get("Type") or "").strip().lower()
-            symbol = (row.get("Symbol") or "").strip()
-            if trade_type not in ("buy", "sell", "dividend") or not symbol:
-                continue
+                trade_date = datetime.strptime(
+                    row["Date"].strip(), "%m/%d/%Y"
+                ).date().isoformat()
+                owner_id = _owner_for_symbol(conn, symbol)
 
-            trade_date = datetime.strptime(
-                row["Date"].strip(), "%m/%d/%Y"
-            ).date().isoformat()
-            owner_id = _owner_for_symbol(conn, symbol)
+                conn.execute(
+                    """
+                    INSERT INTO trades (owner_id, symbol, trade_type, quantity, price,
+                                        trade_date, notes)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        owner_id,
+                        symbol,
+                        trade_type,
+                        float(row["Qty"]),
+                        float(row["Price"]),
+                        trade_date,
+                        IMPORT_NOTES,
+                    ),
+                )
+                inserted += 1
 
-            conn.execute(
-                """
-                INSERT INTO trades (owner_id, symbol, trade_type, quantity, price,
-                                    trade_date, notes)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    owner_id,
-                    symbol,
-                    trade_type,
-                    float(row["Qty"]),
-                    float(row["Price"]),
-                    trade_date,
-                    IMPORT_NOTES,
-                ),
-            )
-            inserted += 1
+            print(f"Historic trade import complete: {inserted} trades.")
+            result = {"status": "migrated", "trades": inserted}
 
-    print(f"Historic trade import complete: {inserted} trades.")
-    return {"status": "migrated", "trades": inserted}
+    # Cost basis is derived from trade prices, so keep it in sync.
+    recompute(db_path)
+    return result
 
 
 def main() -> None:

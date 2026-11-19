@@ -71,6 +71,8 @@ symbols = sorted(h["symbol"] for h in holdings)
 check("15 unique symbols", len(set(symbols)) == 15, str(symbols))
 check("Holdings include computed valuation fields",
       all("current_value" in h and "unrealized_pl" in h and "current_price" in h for h in holdings))
+check("Holdings no longer expose entry_price",
+      all("entry_price" not in h for h in holdings))
 check("Holdings include splits", all(len(h["splits"]) >= 1 for h in holdings))
 
 status, dad_holdings = request("GET", "/api/v1/holdings?owner_id=1")
@@ -114,7 +116,7 @@ check("Buy trade echoes owner name", trade and trade.get("owner_name") == "Dad",
 
 status, sgi = request("GET", "/api/v1/holdings/SGI")
 check("Buy updates quantity to 31", abs(sgi["quantity"] - 31.0) < 1e-9, str(sgi["quantity"]))
-check("Buy updates cost basis to 1883.80", abs(sgi["cost_basis"] - 1883.80) < 1e-6, str(sgi["cost_basis"]))
+check("Buy updates cost basis to 1918.85", abs(sgi["cost_basis"] - 1918.85) < 1e-6, str(sgi["cost_basis"]))
 check("Buy updates split shares", abs(sgi["splits"][0]["shares"] - 31.0) < 1e-9, str(sgi["splits"]))
 
 # Sell 0.5 shares at 62.00
@@ -124,7 +126,7 @@ status, _ = request("POST", "/api/v1/trades", {
 })
 status, sgi = request("GET", "/api/v1/holdings/SGI")
 check("Sell decreases quantity to 30.5", abs(sgi["quantity"] - 30.5) < 1e-9, str(sgi["quantity"]))
-check("Sell decreases cost basis to 1852.80", abs(sgi["cost_basis"] - 1852.80) < 1e-6, str(sgi["cost_basis"]))
+check("Sell decreases cost basis to 1887.85", abs(sgi["cost_basis"] - 1887.85) < 1e-6, str(sgi["cost_basis"]))
 
 # Dividend: 1 share at 0.25, quantity unchanged, cost basis +0.25
 status, _ = request("POST", "/api/v1/trades", {
@@ -133,7 +135,7 @@ status, _ = request("POST", "/api/v1/trades", {
 })
 status, sgi = request("GET", "/api/v1/holdings/SGI")
 check("Dividend leaves quantity unchanged", abs(sgi["quantity"] - 30.5) < 1e-9, str(sgi["quantity"]))
-check("Dividend adds to cost basis", abs(sgi["cost_basis"] - 1853.05) < 1e-6, str(sgi["cost_basis"]))
+check("Dividend adds to cost basis", abs(sgi["cost_basis"] - 1888.10) < 1e-6, str(sgi["cost_basis"]))
 
 status, trades = request("GET", "/api/v1/trades")
 check("GET /trades lists new trades", len(trades) >= 3, f"got {len(trades)}")
@@ -216,7 +218,7 @@ check("Unknown owner summary returns 404", status == 404, str(status))
 
 # --- Holding CRUD ----------------------------------------------------------
 status, created = request("POST", "/api/v1/holdings", {
-    "symbol": "TEST", "quantity": 10, "entry_price": 5.0, "sector": "Test",
+    "symbol": "TEST", "quantity": 10, "sector": "Test",
     "industry": "Test Industry",
 })
 check("POST /holdings creates a position", status == 201 and created["symbol"] == "TEST", str(created))

@@ -16,7 +16,6 @@ CREATE TABLE IF NOT EXISTS holdings (
     holding_id      INTEGER PRIMARY KEY AUTOINCREMENT,
     symbol          TEXT NOT NULL UNIQUE,
     quantity        REAL NOT NULL CHECK (quantity > 0),
-    entry_price     REAL,
     cost_basis      REAL,
     dividend_amount REAL DEFAULT 0,
     dividend_frequency TEXT,
@@ -88,11 +87,50 @@ def db(db_path: str | None = None):
         conn.close()
 
 
+def _migrate_schema(conn) -> None:
+    """Drop legacy columns that are no longer part of the schema."""
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(holdings)")}
+    if "entry_price" not in columns:
+        return
+    try:
+        conn.execute("ALTER TABLE holdings DROP COLUMN entry_price")
+    except sqlite3.OperationalError:
+        # SQLite older than 3.35 cannot drop a column: rebuild the table.
+        conn.execute("ALTER TABLE holdings RENAME TO holdings_legacy")
+        conn.execute(
+            """
+            CREATE TABLE holdings (
+                holding_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+                symbol          TEXT NOT NULL UNIQUE,
+                quantity        REAL NOT NULL CHECK (quantity > 0),
+                cost_basis      REAL,
+                dividend_amount REAL DEFAULT 0,
+                dividend_frequency TEXT,
+                sector          TEXT,
+                industry        TEXT,
+                last_updated    TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO holdings
+                (holding_id, symbol, quantity, cost_basis, dividend_amount,
+                 dividend_frequency, sector, industry, last_updated)
+            SELECT holding_id, symbol, quantity, cost_basis, dividend_amount,
+                   dividend_frequency, sector, industry, last_updated
+            FROM holdings_legacy
+            """
+        )
+        conn.execute("DROP TABLE holdings_legacy")
+
+
 def init_db(db_path: str | None = None) -> None:
     """Create tables and indexes if they do not already exist."""
     conn = get_connection(db_path)
     try:
         conn.executescript(SCHEMA)
+        _migrate_schema(conn)
         conn.commit()
     finally:
         conn.close()

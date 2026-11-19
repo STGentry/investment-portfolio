@@ -51,11 +51,34 @@ def latest_price(conn, symbol: str, fallback: float | None = None) -> float | No
     return float(row["close_price"])
 
 
+def cost_basis_from_trades(conn, symbol: str) -> float:
+    """Total cost basis for a symbol, derived from its trade history.
+
+    Buys and dividends add to the basis, sells subtract from it.
+    """
+    row = conn.execute(
+        """
+        SELECT COALESCE(SUM(
+            CASE trade_type
+                WHEN 'buy' THEN quantity * price
+                WHEN 'sell' THEN -quantity * price
+                ELSE quantity * price
+            END
+        ), 0.0) AS cost_basis
+        FROM trades
+        WHERE symbol = ?
+        """,
+        (symbol,),
+    ).fetchone()
+    return float(row["cost_basis"] or 0.0)
+
+
 def _holding_record(conn, row, splits: list[dict] | None = None) -> dict:
     """Build an API-ready holding record with derived valuation fields."""
-    current_price = latest_price(conn, row["symbol"], fallback=row["entry_price"])
     quantity = float(row["quantity"])
     cost_basis = _to_float(row["cost_basis"])
+    fallback_price = (cost_basis / quantity) if quantity else None
+    current_price = latest_price(conn, row["symbol"], fallback=fallback_price)
     current_value = quantity * (current_price or 0.0)
     unrealized_pl = current_value - cost_basis
     pl_percent = (unrealized_pl / cost_basis * 100.0) if cost_basis else 0.0
@@ -64,7 +87,6 @@ def _holding_record(conn, row, splits: list[dict] | None = None) -> dict:
         "holding_id": row["holding_id"],
         "symbol": row["symbol"],
         "quantity": quantity,
-        "entry_price": row["entry_price"],
         "cost_basis": cost_basis,
         "dividend_amount": _to_float(row["dividend_amount"]),
         "dividend_frequency": row["dividend_frequency"],
@@ -122,7 +144,7 @@ def _owner_holding_rows(
     params = [owner_id]
     add_sector_industry_conditions(conditions, params, sector, industry)
     sql = """
-        SELECT h.holding_id, h.symbol, h.quantity, h.entry_price, h.cost_basis,
+        SELECT h.holding_id, h.symbol, h.quantity, h.cost_basis,
                h.sector, h.industry, h.dividend_amount, h.dividend_frequency,
                h.last_updated, ho.percentage, ho.shares, ho.cost_basis AS split_cost_basis
         FROM holdings h
@@ -134,9 +156,10 @@ def _owner_holding_rows(
 
     records = []
     for row in rows:
-        current_price = latest_price(conn, row["symbol"], fallback=row["entry_price"])
         shares = float(row["shares"])
         split_cost_basis = _to_float(row["split_cost_basis"])
+        fallback_price = (split_cost_basis / shares) if shares else None
+        current_price = latest_price(conn, row["symbol"], fallback=fallback_price)
         current_value = shares * (current_price or 0.0)
         unrealized_pl = current_value - split_cost_basis
         pl_percent = (unrealized_pl / split_cost_basis * 100.0) if split_cost_basis else 0.0
@@ -144,7 +167,6 @@ def _owner_holding_rows(
             {
                 "symbol": row["symbol"],
                 "quantity": shares,
-                "entry_price": row["entry_price"],
                 "cost_basis": split_cost_basis,
                 "current_price": current_price,
                 "current_value": current_value,
@@ -193,7 +215,7 @@ def get_portfolio_summary(
         params = []
         add_sector_industry_conditions(conditions, params, sector, industry)
         sql = """
-            SELECT h.holding_id, h.symbol, h.quantity, h.entry_price, h.cost_basis,
+            SELECT h.holding_id, h.symbol, h.quantity, h.cost_basis,
                    h.sector, h.industry, h.dividend_amount, h.dividend_frequency,
                    h.last_updated
             FROM holdings h

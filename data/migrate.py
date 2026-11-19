@@ -1,23 +1,45 @@
 """One-shot migration from the Google Sheets export into SQLite.
 
-Run with: python migrate.py
+Run with: python -m data.migrate
 """
 
 import argparse
 import csv
+import sys
 from datetime import date
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from config import settings
 from database import db, init_db, is_migration_done
 
 BASE_DIR = Path(__file__).resolve().parent
-SEED_CSV = BASE_DIR / "data" / "seed_portfolio.csv"
+SEED_CSV = BASE_DIR / "seed_portfolio.csv"
 
 
 def load_rows(csv_path: str) -> list[dict]:
     with open(csv_path, newline="", encoding="utf-8") as handle:
         return list(csv.DictReader(handle))
+
+
+def cost_basis_from_trades(conn, symbol: str) -> float:
+    """Total cost basis for a symbol, derived from its trade history."""
+    row = conn.execute(
+        """
+        SELECT COALESCE(SUM(
+            CASE trade_type
+                WHEN 'buy' THEN quantity * price
+                WHEN 'sell' THEN -quantity * price
+                ELSE quantity * price
+            END
+        ), 0.0)
+        FROM trades
+        WHERE symbol = ?
+        """,
+        (symbol,),
+    ).fetchone()
+    return float(row[0] or 0.0)
 
 
 def migrate(csv_path: str = str(SEED_CSV), db_path: str | None = None) -> dict:
@@ -81,15 +103,14 @@ def migrate(csv_path: str = str(SEED_CSV), db_path: str | None = None) -> dict:
             cursor = conn.execute(
                 """
                 INSERT INTO holdings
-                    (symbol, quantity, entry_price, cost_basis, dividend_amount,
+                    (symbol, quantity, cost_basis, dividend_amount,
                      dividend_frequency, sector, industry)
-                VALUES (?, ?, ?, ?, 0, 'none', ?, ?)
+                VALUES (?, ?, ?, 0, 'none', ?, ?)
                 """,
                 (
                     symbol,
                     holding["quantity"],
-                    holding["last_close"],
-                    holding["quantity"] * holding["last_close"],
+                    cost_basis_from_trades(conn, symbol),
                     holding["sector"],
                     holding["industry"],
                 ),
