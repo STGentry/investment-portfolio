@@ -119,4 +119,6 @@ class Summary(BaseModel):
     total_current_value: float
     unrealized_pl: float
     pl_percent: float
+    monthly_dividend: float = 0.0
+    monthly_dividend_amount: float = 0.0
     top_holdings: list[HoldingSummary]

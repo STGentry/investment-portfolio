@@ -76,6 +76,10 @@
         <div class="value" id="unrealized-pl">-</div>
         <div class="sub" id="pl-percent">P&amp;L %: -</div>
       </div>
+      <div class="card">
+        <div class="label">Monthly Dividend Amount</div>
+        <div class="value" id="monthly-dividend">-</div>
+      </div>
     </div>
 
     <div class="section-title">Holdings</div>
@@ -166,6 +170,38 @@ function esc(value) {
 
 function valueClass(v) { return v >= 0 ? 'positive' : 'negative'; }
 
+// Months between dividend payments for the frequencies used by the app.
+const MONTHS_PER_PAYMENT = {
+  monthly: 1,
+  quarterly: 3,
+  'semi-annual': 6,
+  semiannual: 6,
+  'semi annual': 6,
+  annual: 12,
+};
+
+function rowQuantity(row) {
+  if (selectedOwner === 'all') {
+    return Number(row.quantity) || 0;
+  }
+  const split = row.splits.find((s) => s.owner_id === Number(selectedOwner));
+  return split ? Number(split.shares) : (Number(row.quantity) || 0);
+}
+
+// Monthly dividend amount: dividend_amount * quantity, prorated by frequency.
+function monthlyDividendFor(rows) {
+  let total = 0;
+  for (const row of rows) {
+    const amount = Number(row.dividend_amount) || 0;
+    const frequency = String(row.dividend_frequency || 'none').trim().toLowerCase();
+    const months = MONTHS_PER_PAYMENT[frequency];
+    if (months) {
+      total += amount * rowQuantity(row) / months;
+    }
+  }
+  return total;
+}
+
 const messageBox = document.getElementById('message');
 
 function showMessage(text, kind) {
@@ -176,6 +212,7 @@ function showMessage(text, kind) {
 let selectedOwner = 'all';
 let selectedSectors = [];
 let selectedIndustries = [];
+let lastRows = [];
 
 async function loadOwners() {
   const owners = await fetchJson(API + '/owners');
@@ -347,6 +384,22 @@ async function updatePrices() {
   try {
     const result = await postJson(API + '/prices/update');
     await load();
+    if (result.updated) {
+      for (const item of result.updated) {
+        const row = document.querySelector('tr[data-symbol="' + item.symbol + '"]');
+        if (!row) {
+          continue;
+        }
+        const amountInput = row.querySelector('input.dividend-amount-input');
+        const frequencyInput = row.querySelector('input.dividend-frequency-input');
+        if (item.dividend_amount != null && amountInput) {
+          amountInput.value = fmtNum(item.dividend_amount, 2);
+        }
+        if (item.dividend_frequency && frequencyInput) {
+          frequencyInput.value = item.dividend_frequency;
+        }
+      }
+    }
     showMessage(result.message + '.', 'success');
   } catch (error) {
     showMessage(error.message, 'error');
@@ -383,12 +436,18 @@ function renderSummary(summary) {
   const plPercent = document.getElementById('pl-percent');
   plPercent.textContent = 'P&L %: ' + fmtPct(summary.pl_percent);
   plPercent.className = 'sub ' + valueClass(summary.pl_percent);
+  const monthlyDividend = document.getElementById('monthly-dividend');
+  monthlyDividend.textContent = summary.monthly_dividend != null
+    ? fmtMoney(summary.monthly_dividend)
+    : fmtMoney(monthlyDividendFor(lastRows));
 }
 
 function renderHoldings(rows) {
+  lastRows = rows;
   const tbody = document.getElementById('holdings-body');
   if (!rows.length) {
     tbody.innerHTML = '<tr><td colspan="12" class="empty">No holdings found.</td></tr>';
+    document.getElementById('monthly-dividend').textContent = fmtMoney(0);
     return;
   }
   tbody.innerHTML = rows.map((row) => {
@@ -431,6 +490,7 @@ function renderHoldings(rows) {
       '<td><button type="button" class="secondary" data-save="' + symbol + '">Save</button></td>' +
       '</tr>';
   }).join('');
+  document.getElementById('monthly-dividend').textContent = fmtMoney(monthlyDividendFor(rows));
 }
 
 async function saveRow(symbol) {

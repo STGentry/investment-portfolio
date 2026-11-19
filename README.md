@@ -82,7 +82,7 @@ Base URL: `http://localhost:8000/api/v1`
 | GET | `/analytics/summary` | Portfolio summary (all owners) |
 | GET | `/analytics/summary?owner_id=1` | Summary for one owner |
 | GET | `/analytics/summary?sector=&industry=` | Summary filtered by sector and/or industry (repeatable params match any selection) |
-| POST | `/prices/update` | Refresh latest close prices for all holdings via Yahoo Finance (yfinance) |
+| POST | `/prices/update` | Refresh latest close prices and dividend amount/frequency for all holdings via Yahoo Finance (yfinance) |
 
 
 ## Project Structure

@@ -14,6 +14,35 @@ def _money(value: float) -> float:
     return 0.0 if value == 0 else value
 
 
+# Months between dividend payments for the frequency labels used by the app.
+DIVIDEND_MONTHS_PER_PAYMENT = {
+    "monthly": 1,
+    "quarterly": 3,
+    "semi-annual": 6,
+    "semiannual": 6,
+    "semi annual": 6,
+    "annual": 12,
+}
+
+
+def monthly_dividend_amount(records: list[dict]) -> float:
+    """Estimated monthly dividend income for a list of holding records.
+
+    ``dividend_amount`` is the amount paid per share for one period, so the
+    total is prorated by how many months sit between dividend payments.
+    """
+    total = 0.0
+    for record in records:
+        amount = _to_float(record.get("dividend_amount"))
+        quantity = _to_float(record.get("quantity"))
+        frequency = str(record.get("dividend_frequency") or "none").strip().lower()
+        months = DIVIDEND_MONTHS_PER_PAYMENT.get(frequency)
+        if not months:
+            continue
+        total += amount * quantity / months
+    return _money(total)
+
+
 def _normalize_filter(values) -> list[str] | None:
     """Normalize repeated query values into a lowercase list, or None if empty."""
     if not values:
@@ -175,6 +204,8 @@ def _owner_holding_rows(
                 "percentage": float(row["percentage"]),
                 "sector": row["sector"],
                 "industry": row["industry"],
+                "dividend_amount": _to_float(row["dividend_amount"]),
+                "dividend_frequency": row["dividend_frequency"],
             }
         )
     return records
@@ -187,6 +218,7 @@ def summarize(records: list[dict]) -> dict:
     unrealized_pl = total_current_value - total_cost_basis
     pl_percent = (unrealized_pl / total_cost_basis * 100.0) if total_cost_basis else 0.0
 
+    monthly_dividend = monthly_dividend_amount(records)
     top = sorted(records, key=lambda r: _to_float(r.get("current_value")), reverse=True)[:5]
     return {
         "total_positions": len(records),
@@ -194,6 +226,8 @@ def summarize(records: list[dict]) -> dict:
         "total_current_value": _money(total_current_value),
         "unrealized_pl": _money(unrealized_pl),
         "pl_percent": _money(pl_percent),
+        "monthly_dividend": monthly_dividend,
+        "monthly_dividend_amount": monthly_dividend,
         "top_holdings": [
             {
                 "symbol": r["symbol"],
