@@ -26,12 +26,30 @@
         <select id="owner-select"></select>
       </div>
       <div class="toolbar-item">
-        <label for="sector-select">Sector</label>
-        <select id="sector-select" multiple></select>
+        <label for="sector-toggle">Sector</label>
+        <div class="filter">
+          <button type="button" id="sector-toggle" class="filter-toggle" aria-haspopup="listbox" aria-expanded="false">
+            <span id="sector-title">All sectors</span>
+          </button>
+          <ul class="filter-list" id="sector-list" hidden>
+            <li class="filter-all">
+              <label><input type="checkbox" data-all="true" checked> All sectors</label>
+            </li>
+          </ul>
+        </div>
       </div>
       <div class="toolbar-item">
-        <label for="industry-select">Industry</label>
-        <select id="industry-select" multiple></select>
+        <label for="industry-toggle">Industry</label>
+        <div class="filter">
+          <button type="button" id="industry-toggle" class="filter-toggle" aria-haspopup="listbox" aria-expanded="false">
+            <span id="industry-title">All industries</span>
+          </button>
+          <ul class="filter-list" id="industry-list" hidden>
+            <li class="filter-all">
+              <label><input type="checkbox" data-all="true" checked> All industries</label>
+            </li>
+          </ul>
+        </div>
       </div>
       <div class="toolbar-item toolbar-actions">
         <button id="update-prices" type="button">Update Prices</button>
@@ -178,35 +196,10 @@ async function loadOwners() {
   });
 }
 
-async function loadFilters() {
-  const holdings = await fetchJson(API + '/holdings');
-  const sectors = [...new Set(holdings.map((h) => h.sector).filter(Boolean))].sort();
-  const industries = [...new Set(holdings.map((h) => h.industry).filter(Boolean))].sort();
-  populateFilter('sector-select', sectors, 'All sectors');
-  populateFilter('industry-select', industries, 'All industries');
-}
-
-function populateFilter(selectId, values, placeholder) {
-  const select = document.getElementById(selectId);
-  const allOption = document.createElement('option');
-  allOption.value = '';
-  allOption.textContent = placeholder;
-  allOption.disabled = true;
-  allOption.selected = true;
-  select.appendChild(allOption);
-  for (const value of values) {
-    const option = document.createElement('option');
-    option.value = value;
-    option.textContent = value;
-    select.appendChild(option);
-  }
-}
-
-function readMultiSelect(select) {
-  return Array.from(select.selectedOptions)
-    .map((option) => option.value)
-    .filter((value) => value !== '');
-}
+const filterConfigs = [
+  { name: 'sector', selected: selectedSectors, placeholder: 'All sectors' },
+  { name: 'industry', selected: selectedIndustries, placeholder: 'All industries' },
+];
 
 function appendFilterValues(params, name, values) {
   for (const value of values) {
@@ -224,14 +217,127 @@ function filterQuery() {
   return params.length ? '?' + params.join('&') : '';
 }
 
-document.getElementById('sector-select').addEventListener('change', (event) => {
-  selectedSectors = readMultiSelect(event.target);
-  load();
-});
+async function loadFilters() {
+  const holdings = await fetchJson(API + '/holdings');
+  for (const config of filterConfigs) {
+    const values = [...new Set(holdings.map((h) => h[config.name]).filter(Boolean))].sort();
+    buildFilterList(config, values);
+  }
+}
 
-document.getElementById('industry-select').addEventListener('change', (event) => {
-  selectedIndustries = readMultiSelect(event.target);
+function buildFilterList(config, values) {
+  const list = document.getElementById(config.name + '-list');
+  const title = document.getElementById(config.name + '-title');
+  list.innerHTML = '';
+
+  const allItem = document.createElement('li');
+  allItem.className = 'filter-all';
+  const allLabel = document.createElement('label');
+  const allCheckbox = document.createElement('input');
+  allCheckbox.type = 'checkbox';
+  allCheckbox.dataset.all = 'true';
+  allCheckbox.checked = true;
+  allLabel.appendChild(allCheckbox);
+  allLabel.appendChild(document.createTextNode(config.placeholder));
+  allItem.appendChild(allLabel);
+  list.appendChild(allItem);
+
+  for (const value of values) {
+    const item = document.createElement('li');
+    item.className = 'filter-option';
+    const label = document.createElement('label');
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.value = value;
+    checkbox.checked = config.selected.includes(value);
+    label.appendChild(checkbox);
+    label.appendChild(document.createTextNode(value));
+    item.appendChild(label);
+    list.appendChild(item);
+  }
+
+  config.selected.length = 0;
+  updateFilterTitle(config);
+}
+
+function updateFilterTitle(config) {
+  const title = document.getElementById(config.name + '-title');
+  const list = document.getElementById(config.name + '-list');
+  const allCheckbox = list.querySelector('[data-all="true"]');
+  if (allCheckbox.checked || config.selected.length === 0) {
+    title.textContent = config.placeholder;
+  } else if (config.selected.length === 1) {
+    title.textContent = config.selected[0];
+  } else {
+    title.textContent = config.selected.length + ' selected';
+  }
+}
+
+function handleFilterChange(event, config) {
+  const checkbox = event.target;
+  if (!checkbox || checkbox.type !== 'checkbox') {
+    return;
+  }
+
+  const list = document.getElementById(config.name + '-list');
+  const allCheckbox = list.querySelector('[data-all="true"]');
+  const options = list.querySelectorAll('input[type="checkbox"]:not([data-all="true"])');
+
+  if (checkbox === allCheckbox) {
+    // "All" toggled: keep the specific checkboxes in sync.
+    options.forEach((option) => { option.checked = !checkbox.checked; });
+  } else if (allCheckbox.checked) {
+    // Picking a specific value turns "All" off.
+    allCheckbox.checked = false;
+  }
+
+  config.selected.length = 0;
+  if (!allCheckbox.checked) {
+    options.forEach((option) => {
+      if (option.checked) {
+        config.selected.push(option.value);
+      }
+    });
+  }
+
+  updateFilterTitle(config);
   load();
+}
+
+for (const config of filterConfigs) {
+  const list = document.getElementById(config.name + '-list');
+  list.addEventListener('change', (event) => handleFilterChange(event, config));
+}
+
+function wireFilterToggle(name) {
+  const toggle = document.getElementById(name + '-toggle');
+  const list = document.getElementById(name + '-list');
+  toggle.addEventListener('click', () => {
+    list.hidden = !list.hidden;
+    toggle.setAttribute('aria-expanded', String(!list.hidden));
+  });
+}
+
+wireFilterToggle('sector');
+wireFilterToggle('industry');
+
+function closeFilterDropdowns(exceptTarget) {
+  for (const config of filterConfigs) {
+    const toggle = document.getElementById(config.name + '-toggle');
+    const list = document.getElementById(config.name + '-list');
+    if (list.hidden || list.contains(exceptTarget) || toggle.contains(exceptTarget)) {
+      continue;
+    }
+    list.hidden = true;
+    toggle.setAttribute('aria-expanded', 'false');
+  }
+}
+
+document.addEventListener('click', (event) => closeFilterDropdowns(event.target));
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') {
+    closeFilterDropdowns(null);
+  }
 });
 
 async function updatePrices() {
