@@ -156,6 +156,12 @@ table.data tr:last-child td { border-bottom: none; }
 table.data tbody tr:hover { background: #f8fafc; }
 table.data td.num, table.data th.num { text-align: right; font-variant-numeric: tabular-nums; }
 
+table.data thead th.sortable { cursor: pointer; }
+table.data thead th.sortable:hover { background: #eef2f6; }
+table.data thead th.sorted { color: var(--accent); font-weight: 700; }
+table.data thead th .sort-indicator { font-size: 10px; margin-left: 4px; opacity: 0.45; }
+table.data thead th.sorted .sort-indicator { opacity: 1; }
+
 td.positive { color: var(--positive); font-weight: 600; }
 td.negative { color: var(--negative); font-weight: 600; }
 

@@ -84,18 +84,18 @@
 
     <div class="section-title">Holdings</div>
     <table class="data">
-      <thead>
+      <thead id="holdings-head">
         <tr>
           <th>Symbol</th>
-          <th class="num">Quantity</th>
+          <th class="num sortable" data-sort="quantity" title="Sort by quantity">Quantity<span class="sort-indicator" aria-hidden="true"></span></th>
           <th>Owner Split</th>
           <th class="num">Cost Basis</th>
-          <th class="num">Current Price</th>
-          <th class="num">Current Value</th>
+          <th class="num sortable" data-sort="current_price" title="Sort by current price">Current Price<span class="sort-indicator" aria-hidden="true"></span></th>
+          <th class="num sortable" data-sort="current_value" title="Sort by current value">Current Value<span class="sort-indicator" aria-hidden="true"></span></th>
           <th class="num">Unrealized P&amp;L</th>
           <th>Sector</th>
           <th>Industry</th>
-          <th class="num">Dividend Amount</th>
+          <th class="num sortable" data-sort="dividend_amount" title="Sort by dividend amount">Dividend Amount<span class="sort-indicator" aria-hidden="true"></span></th>
           <th>Dividend Frequency</th>
           <th>Save</th>
         </tr>
@@ -213,6 +213,8 @@ let selectedOwner = 'all';
 let selectedSectors = [];
 let selectedIndustries = [];
 let lastRows = [];
+let sortField = 'symbol';
+let sortOrder = 'asc';
 
 async function loadOwners() {
   const owners = await fetchJson(API + '/owners');
@@ -244,14 +246,26 @@ function appendFilterValues(params, name, values) {
   }
 }
 
-function filterQuery() {
+function filterParams() {
   const params = [];
   if (selectedOwner !== 'all') {
     params.push('owner_id=' + selectedOwner);
   }
   appendFilterValues(params, 'sector', selectedSectors);
   appendFilterValues(params, 'industry', selectedIndustries);
+  return params;
+}
+
+function filterQuery() {
+  const params = filterParams();
   return params.length ? '?' + params.join('&') : '';
+}
+
+function holdingsQuery() {
+  const params = filterParams();
+  params.push('sort_by=' + sortField);
+  params.push('order=' + sortOrder);
+  return '?' + params.join('&');
 }
 
 async function loadFilters() {
@@ -358,6 +372,38 @@ function wireFilterToggle(name) {
 wireFilterToggle('sector');
 wireFilterToggle('industry');
 
+function updateSortIndicators() {
+  for (const header of document.querySelectorAll('th[data-sort]')) {
+    const indicator = header.querySelector('.sort-indicator');
+    if (!indicator) {
+      continue;
+    }
+    if (header.dataset.sort === sortField) {
+      indicator.textContent = sortOrder === 'asc' ? '\u25B2' : '\u25BC';
+      header.classList.add('sorted');
+    } else {
+      indicator.textContent = '';
+      header.classList.remove('sorted');
+    }
+  }
+}
+
+document.getElementById('holdings-head').addEventListener('click', (event) => {
+  const header = event.target.closest('th[data-sort]');
+  if (!header) {
+    return;
+  }
+  const field = header.dataset.sort;
+  if (sortField === field) {
+    sortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
+  } else {
+    sortField = field;
+    sortOrder = 'asc';
+  }
+  updateSortIndicators();
+  load();
+});
+
 function closeFilterDropdowns(exceptTarget) {
   for (const config of filterConfigs) {
     const toggle = document.getElementById(config.name + '-toggle');
@@ -415,7 +461,7 @@ async function load() {
   try {
     const summary = await fetchJson(API + '/analytics/summary' + query);
     renderSummary(summary);
-    const holdings = await fetchJson(API + '/holdings' + query);
+    const holdings = await fetchJson(API + '/holdings' + holdingsQuery());
     renderHoldings(holdings);
   } catch (error) {
     document.getElementById('holdings-body').innerHTML =

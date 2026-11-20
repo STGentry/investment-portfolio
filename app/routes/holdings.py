@@ -18,9 +18,11 @@ SORTABLE_FIELDS = {
     "symbol": "symbol",
     "quantity": "quantity",
     "cost_basis": "cost_basis",
+    "current_price": "current_price",
     "current_value": "current_value",
     "unrealized_pl": "unrealized_pl",
     "pl_percent": "unrealized_pl_percent",
+    "dividend_amount": "dividend_amount",
 }
 
 
@@ -68,12 +70,18 @@ def list_holdings(
     sector: list[str] | None = Query(None),
     industry: list[str] | None = Query(None),
     sort_by: str = "symbol",
+    order: str = "asc",
 ) -> list[HoldingRead]:
     """List positions with optional owner/sector/industry filters and sorting."""
     if sort_by not in SORTABLE_FIELDS:
         raise HTTPException(
             status_code=400,
             detail=f"Invalid sort_by '{sort_by}'. Allowed: {', '.join(sorted(SORTABLE_FIELDS))}",
+        )
+    if order not in ("asc", "desc"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid order '{order}'. Allowed: asc, desc",
         )
     with db() as conn:
         conditions = []
@@ -93,7 +101,10 @@ def list_holdings(
 
         records = [get_holding(conn, row["symbol"]) for row in symbols]
         key = SORTABLE_FIELDS[sort_by]
-        records.sort(key=lambda r: (r[key] is None, r[key]))
+        present = [record for record in records if record[key] is not None]
+        missing = [record for record in records if record[key] is None]
+        present.sort(key=lambda r: r[key], reverse=(order == "desc"))
+        records = present + missing
     return records
 
 

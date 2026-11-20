@@ -66,7 +66,7 @@ Base URL: `http://localhost:8000/api/v1`
 | --- | --- | --- |
 | GET | `/owners` | List all owners |
 | GET | `/owners/{owner_id}` | Get owner details |
-| GET | `/holdings` | List positions (`?owner_id=`, `?sector=` (repeatable), `?industry=` (repeatable), `?sort_by=`) |
+| GET | `/holdings` | List positions (`?owner_id=`, `?sector=` (repeatable), `?industry=` (repeatable), `?sort_by=`, `?order=asc\|desc`) |
 | GET | `/holdings/{symbol}` | Get one position |
 | POST | `/holdings` | Create/upsert position |
 | PUT | `/holdings/{symbol}` | Update position fields |
