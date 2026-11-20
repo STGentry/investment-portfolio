@@ -87,6 +87,17 @@ class TradeCreate(BaseModel):
     notes: str | None = Field(default=None, max_length=500)
 
 
+class TradeUpdate(BaseModel):
+    """Partial update for an existing trade; omitted fields are left unchanged."""
+
+    symbol: str | None = Field(default=None, min_length=1, max_length=10)
+    trade_type: Literal["buy", "sell", "dividend"] | None = None
+    quantity: float | None = Field(default=None, gt=0)
+    price: float | None = Field(default=None, ge=0)
+    trade_date: date | None = None
+    notes: str | None = Field(default=None, max_length=500)
+
+
 class TradeRead(BaseModel):
     trade_id: int
     owner_id: int

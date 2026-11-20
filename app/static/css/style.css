@@ -176,6 +176,14 @@ td.negative { color: var(--negative); font-weight: 600; }
 .form-row .field label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; }
 .form-actions { margin-top: 18px; }
 
+/* Editable trade history grid */
+td.actions { width: 1%; white-space: nowrap; }
+button[data-delete] { padding: 4px 10px; font-size: 12px; }
+.trade-symbol { width: 90px; }
+.trade-quantity, .trade-price { width: 110px; text-align: right; }
+.trade-date { width: 130px; }
+.trade-notes { width: 100%; }
+
 .section-title {
   font-size: 18px;
   font-weight: 700;

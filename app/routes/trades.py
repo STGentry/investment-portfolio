@@ -5,7 +5,7 @@ from datetime import date
 from fastapi import APIRouter, HTTPException
 
 from database import db
-from models import TradeCreate, TradeRead
+from models import TradeCreate, TradeRead, TradeUpdate
 from .holdings import _recalculate_splits
 
 router = APIRouter()
@@ -56,6 +56,49 @@ def _list_trades(conn, owner_id=None, symbol=None, trade_type=None,
 
     rows = conn.execute(sql, params).fetchall()
     return [_serialize_trade(conn, row) for row in rows]
+
+
+def _trade_deltas(trade_type: str, quantity: float, price: float) -> tuple[float, float]:
+    """Return the (quantity, cost basis) deltas a trade applies to its holding."""
+    quantity = float(quantity)
+    price = float(price)
+    if trade_type == "buy":
+        return quantity, quantity * price
+    if trade_type == "sell":
+        return -quantity, -quantity * price
+    # Dividends add income to the cost basis without changing the share count.
+    return 0.0, quantity * price
+
+
+def _apply_trade_delta(
+    conn, symbol: str, quantity_delta: float, cost_basis_delta: float
+) -> None:
+    """Apply a trade's effect to a holding and refresh its ownership splits."""
+    holding = conn.execute(
+        "SELECT holding_id, quantity, cost_basis FROM holdings WHERE symbol = ?", (symbol,)
+    ).fetchone()
+    if holding is None:
+        raise HTTPException(status_code=404, detail=f"Holding {symbol} not found")
+
+    new_quantity = float(holding["quantity"]) + quantity_delta
+    new_cost_basis = float(holding["cost_basis"] or 0.0) + cost_basis_delta
+    if new_quantity <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Trade would leave {symbol} with {new_quantity} shares; "
+                "the holding must stay above zero."
+            ),
+        )
+
+    conn.execute(
+        """
+        UPDATE holdings SET quantity = ?, cost_basis = ?, last_updated = datetime('now')
+        WHERE holding_id = ?
+        """,
+        (new_quantity, new_cost_basis, holding["holding_id"]),
+    )
+    _recalculate_splits(conn, symbol)
 
 
 @router.get("/trades")
@@ -150,6 +193,110 @@ def log_trade(data: TradeCreate) -> TradeRead:
 
         row = conn.execute("SELECT t.* FROM trades t WHERE t.trade_id = ?", (trade_id,)).fetchone()
         return _serialize_trade(conn, row)
+
+
+@router.put("/trades/{trade_id}", response_model=TradeRead)
+@router.patch("/trades/{trade_id}", response_model=TradeRead)
+def update_trade(trade_id: int, data: TradeUpdate) -> TradeRead:
+    """Update an existing trade and refresh every holding it affects.
+
+    Only the fields present in the request body are changed; the owner of the
+    trade is fixed. The previous trade is reversed and the new values applied so
+    holdings quantity, cost basis, and ownership splits stay in sync.
+    """
+    with db() as conn:
+        row = conn.execute(
+            "SELECT t.* FROM trades t WHERE t.trade_id = ?", (trade_id,)
+        ).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail=f"Trade {trade_id} not found")
+
+        owner = conn.execute(
+            "SELECT owner_id FROM owners WHERE owner_id = ?", (row["owner_id"],)
+        ).fetchone()
+        if owner is None:
+            raise HTTPException(status_code=404, detail=f"Owner {row['owner_id']} not found")
+
+        provided = data.model_fields_set
+        symbol = data.symbol if "symbol" in provided else row["symbol"]
+        trade_type = data.trade_type if "trade_type" in provided else row["trade_type"]
+        quantity = float(data.quantity) if "quantity" in provided else float(row["quantity"])
+        price = float(data.price) if "price" in provided else float(row["price"])
+        if "trade_date" in provided:
+            trade_date = data.trade_date or date.today()
+        else:
+            trade_date = date.fromisoformat(row["trade_date"])
+        notes = data.notes if "notes" in provided else row["notes"]
+
+        new_holding = conn.execute(
+            "SELECT holding_id FROM holdings WHERE symbol = ?", (symbol,)
+        ).fetchone()
+        if new_holding is None:
+            raise HTTPException(status_code=404, detail=f"Holding {symbol} not found")
+
+        old_symbol = row["symbol"]
+        if old_symbol == symbol:
+            old_qty, old_cost = _trade_deltas(row["trade_type"], row["quantity"], row["price"])
+            new_qty, new_cost = _trade_deltas(trade_type, quantity, price)
+            _apply_trade_delta(conn, symbol, new_qty - old_qty, new_cost - old_cost)
+        else:
+            # The trade moved to another symbol: reverse it from the old
+            # holding first, then apply it to the new one.
+            old_qty, old_cost = _trade_deltas(row["trade_type"], row["quantity"], row["price"])
+            _apply_trade_delta(conn, old_symbol, -old_qty, -old_cost)
+            new_qty, new_cost = _trade_deltas(trade_type, quantity, price)
+            _apply_trade_delta(conn, symbol, new_qty, new_cost)
+
+        conn.execute(
+            """
+            UPDATE trades SET symbol = ?, trade_type = ?, quantity = ?, price = ?,
+                              trade_date = ?, notes = ?
+            WHERE trade_id = ?
+            """,
+            (symbol, trade_type, quantity, price, trade_date.isoformat(), notes, trade_id),
+        )
+
+        row = conn.execute("SELECT t.* FROM trades t WHERE t.trade_id = ?", (trade_id,)).fetchone()
+        return _serialize_trade(conn, row)
+
+
+@router.delete("/trades/{trade_id}")
+def delete_trade(trade_id: int) -> dict:
+    """Delete a trade and reverse its effect on the holding."""
+    with db() as conn:
+        row = conn.execute(
+            "SELECT t.* FROM trades t WHERE t.trade_id = ?", (trade_id,)
+        ).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail=f"Trade {trade_id} not found")
+
+        quantity_delta, cost_basis_delta = _trade_deltas(
+            row["trade_type"], row["quantity"], row["price"]
+        )
+        holding = conn.execute(
+            "SELECT holding_id, quantity, cost_basis FROM holdings WHERE symbol = ?",
+            (row["symbol"],),
+        ).fetchone()
+
+        if holding is not None:
+            new_quantity = float(holding["quantity"]) - quantity_delta
+            new_cost_basis = float(holding["cost_basis"] or 0.0) - cost_basis_delta
+            if new_quantity <= 0:
+                # The position is fully closed: remove the holding (splits cascade).
+                conn.execute("DELETE FROM holdings WHERE holding_id = ?", (holding["holding_id"],))
+            else:
+                conn.execute(
+                    """
+                    UPDATE holdings SET quantity = ?, cost_basis = ?,
+                                        last_updated = datetime('now')
+                    WHERE holding_id = ?
+                    """,
+                    (new_quantity, new_cost_basis, holding["holding_id"]),
+                )
+                _recalculate_splits(conn, row["symbol"])
+
+        conn.execute("DELETE FROM trades WHERE trade_id = ?", (trade_id,))
+        return {"message": f"Trade {trade_id} deleted", "trade_id": trade_id}
 
 
 @router.get("/owners/{owner_id}/trades")

@@ -60,22 +60,26 @@
       <button type="submit" id="submit-button">Log Trade</button>
     </div>
 
-    <div class="section-title">Holdings</div>
+    <div class="section-title">Trade History</div>
     <table class="data">
       <thead>
         <tr>
           <th>Symbol</th>
+          <th>Type</th>
           <th class="num">Quantity</th>
-          <th class="num">Cost Basis</th>
-          <th class="num">Current Price</th>
-          <th class="num">Current Value</th>
-          <th class="num">Unrealized P&amp;L</th>
+          <th class="num">Price</th>
+          <th>Trade Date</th>
+          <th>Notes</th>
+          <th class="actions"></th>
         </tr>
       </thead>
-      <tbody id="holdings-body">
-        <tr><td colspan="6" class="empty">Loading holdings...</td></tr>
+      <tbody id="trades-body">
+        <tr><td colspan="7" class="empty">Loading trades...</td></tr>
       </tbody>
     </table>
+    <div class="form-actions">
+      <button type="button" id="save-button">Save Changes</button>
+    </div>
   </div>
 
   <script>
@@ -95,6 +99,32 @@ async function postJson(url, payload) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error = new Error(body.detail || 'Request failed: ' + res.status);
+    error.status = res.status;
+    throw error;
+  }
+  return body;
+}
+
+async function putJson(url, payload) {
+  const res = await fetch(url, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error = new Error(body.detail || 'Request failed: ' + res.status);
+    error.status = res.status;
+    throw error;
+  }
+  return body;
+}
+
+async function deleteJson(url) {
+  const res = await fetch(url, { method: 'DELETE' });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
     const error = new Error(body.detail || 'Request failed: ' + res.status);
@@ -133,6 +163,8 @@ const quantityInput = document.getElementById('quantity-input');
 const priceInput = document.getElementById('price-input');
 const dateInput = document.getElementById('trade-date');
 const notesInput = document.getElementById('notes-input');
+const tradesBody = document.getElementById('trades-body');
+const saveButton = document.getElementById('save-button');
 
 function showMessage(text, kind) {
   messageBox.className = 'message ' + kind;
@@ -154,44 +186,108 @@ async function loadOwners() {
     ownerSelect.appendChild(option);
   }
   dateInput.value = todayLocal();
-  ownerSelect.addEventListener('change', () => loadHoldings());
+  ownerSelect.addEventListener('change', () => loadTrades());
 }
 
-async function loadHoldings() {
+async function loadTrades() {
   const ownerValue = ownerSelect.value;
   try {
-    const holdings = await fetchJson(API + '/holdings?owner_id=' + ownerValue);
-    renderHoldings(holdings, Number(ownerValue));
+    const trades = await fetchJson(API + '/owners/' + ownerValue + '/trades');
+    renderTrades(trades);
   } catch (error) {
-    document.getElementById('holdings-body').innerHTML =
-      '<tr><td colspan="6" class="empty">' + esc(error.message) + '</td></tr>';
+    tradesBody.innerHTML =
+      '<tr><td colspan="7" class="empty">' + esc(error.message) + '</td></tr>';
   }
 }
 
-function renderHoldings(rows, ownerId) {
-  const tbody = document.getElementById('holdings-body');
+function renderTrades(rows) {
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="empty">No holdings for this owner.</td></tr>';
+    tradesBody.innerHTML = '<tr><td colspan="7" class="empty">No trades for this owner.</td></tr>';
     return;
   }
-  tbody.innerHTML = rows.map((row) => {
-    const split = row.splits.find((s) => s.owner_id === ownerId);
-    if (!split) {
-      return '<tr><td><strong>' + esc(row.symbol) + '</strong></td><td colspan="5">No split for this owner</td></tr>';
-    }
-    const currentPrice = row.current_price || 0;
-    const currentValue = split.shares * currentPrice;
-    const pl = currentValue - split.cost_basis;
-    return '<tr>' +
-      '<td><strong>' + esc(row.symbol) + '</strong></td>' +
-      '<td class="num">' + fmtQty(split.shares) + '</td>' +
-      '<td class="num">' + fmtMoney(split.cost_basis) + '</td>' +
-      '<td class="num">' + fmtMoney(currentPrice) + '</td>' +
-      '<td class="num">' + fmtMoney(currentValue) + '</td>' +
-      '<td class="num ' + valueClass(pl) + '">' + fmtMoney(pl) + '</td>' +
+  tradesBody.innerHTML = rows.map((trade) => {
+    const tradeType = trade.trade_type || 'buy';
+    return '<tr data-trade-id="' + trade.trade_id + '">' +
+      '<td><input type="text" class="trade-symbol" maxlength="10" value="' + esc(trade.symbol) + '"></td>' +
+      '<td><select class="trade-type">' +
+        '<option value="buy"' + (tradeType === 'buy' ? ' selected' : '') + '>Buy</option>' +
+        '<option value="sell"' + (tradeType === 'sell' ? ' selected' : '') + '>Sell</option>' +
+        '<option value="dividend"' + (tradeType === 'dividend' ? ' selected' : '') + '>Dividend</option>' +
+      '</select></td>' +
+      '<td class="num"><input type="number" class="trade-quantity" step="0.000001" min="0.000001" value="' +
+        Number(trade.quantity).toFixed(6) + '"></td>' +
+      '<td class="num"><input type="number" class="trade-price" step="0.01" min="0" value="' +
+        Number(trade.price).toFixed(2) + '"></td>' +
+      '<td><input type="date" class="trade-date" value="' + esc(trade.trade_date) + '"></td>' +
+      '<td><input type="text" class="trade-notes" maxlength="200" value="' + esc(trade.notes || '') + '"></td>' +
+      '<td class="actions"><button type="button" class="danger tiny" data-delete="' + trade.trade_id + '">Delete</button></td>' +
       '</tr>';
   }).join('');
 }
+
+// Mark a row as changed as soon as any of its fields are edited.
+tradesBody.addEventListener('input', (event) => {
+  const row = event.target.closest('tr[data-trade-id]');
+  if (row) {
+    row.classList.add('dirty');
+  }
+});
+tradesBody.addEventListener('change', (event) => {
+  const row = event.target.closest('tr[data-trade-id]');
+  if (row) {
+    row.classList.add('dirty');
+  }
+});
+
+async function saveChanges() {
+  const dirtyRows = Array.from(tradesBody.querySelectorAll('tr.dirty'));
+  if (!dirtyRows.length) {
+    showMessage('No changes to save.', 'success');
+    return;
+  }
+
+  saveButton.disabled = true;
+  saveButton.textContent = 'Saving...';
+  try {
+    for (const row of dirtyRows) {
+      const tradeId = Number(row.dataset.tradeId);
+      const payload = {
+        symbol: row.querySelector('.trade-symbol').value.trim(),
+        trade_type: row.querySelector('.trade-type').value,
+        quantity: Number(row.querySelector('.trade-quantity').value),
+        price: Number(row.querySelector('.trade-price').value),
+        trade_date: row.querySelector('.trade-date').value,
+        notes: row.querySelector('.trade-notes').value.trim(),
+      };
+      await putJson(API + '/trades/' + tradeId, payload);
+      row.classList.remove('dirty');
+    }
+    showMessage('Trade changes saved.', 'success');
+    await loadTrades();
+  } catch (error) {
+    showMessage(error.message, 'error');
+  } finally {
+    saveButton.disabled = false;
+    saveButton.textContent = 'Save Changes';
+  }
+}
+
+saveButton.addEventListener('click', saveChanges);
+
+tradesBody.addEventListener('click', async (event) => {
+  const button = event.target.closest('button[data-delete]');
+  if (!button) {
+    return;
+  }
+  const tradeId = Number(button.dataset.delete);
+  try {
+    await deleteJson(API + '/trades/' + tradeId);
+    button.closest('tr').remove();
+    showMessage('Trade ' + tradeId + ' deleted.', 'success');
+  } catch (error) {
+    showMessage(error.message, 'error');
+  }
+});
 
 document.getElementById('trade-form').addEventListener('submit', async (event) => {
   event.preventDefault();
@@ -244,7 +340,7 @@ document.getElementById('trade-form').addEventListener('submit', async (event) =
       ' ' + trade.symbol + ' @ ' + fmtMoney(trade.price) + ').',
       'success'
     );
-    loadHoldings();
+    loadTrades();
   } catch (error) {
     showMessage(error.message, 'error');
   } finally {
@@ -253,7 +349,7 @@ document.getElementById('trade-form').addEventListener('submit', async (event) =
   }
 });
 
-loadOwners().then(loadHoldings);
+loadOwners().then(loadTrades);
 </script>
 </body>
 </html>
