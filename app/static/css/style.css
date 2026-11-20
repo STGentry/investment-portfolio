@@ -122,8 +122,8 @@ button {
 button:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
 button.secondary { background: var(--surface); color: var(--accent); }
 button.secondary:hover { background: #eef2f6; }
-button.danger { background: var(--negative); border-color: var(--negative); }
-button.danger:hover { background: #8f1f18; border-color: #8f1f18; }
+button.danger { background: var(--surface); border-color: var(--negative); color: var(--negative); }
+button.danger:hover { background: #eef2f6; border-color: var(--negative); color: var(--negative); }
 button.tiny { padding: 4px 10px; font-size: 12px; }
 
 .message { padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; font-weight: 600; }
