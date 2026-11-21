@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Visualizations</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="container">
+    <header class="page">
+      <div>
+        <h1>Visualizations</h1>
+        <div class="sub">Charts for shares bought, sold, and currently held by position.</div>
+      </div>
+      <nav class="nav">
+        <a href="/">Dashboard</a>
+        <a href="/trades.html">Log Trade</a>
+        <a href="/holdings_edit.html">Holdings Editor</a>
+        <a href="/visualizations.html">Visualizations</a>
+      </nav>
+    </header>
+
+    <div class="message" id="message"></div>
+
+    <div class="section-title">Shares Bought vs Sold vs Current Quantity</div>
+    <div class="card">
+      <div class="chart-header">
+        <div class="chart-title">Shares by Position</div>
+        <div class="chart-sub">Bought and sold share counts from the trade history, compared with the current quantity of each position.</div>
+      </div>
+      <div id="chart"></div>
+    </div>
+
+    <div class="chart-legend">
+      <span class="legend-item"><span class="legend-swatch" style="background: var(--positive); opacity: 0.35;"></span>Bought</span>
+      <span class="legend-item"><span class="legend-swatch" style="background: var(--positive); opacity: 0.6;"></span>Sold</span>
+      <span class="legend-item"><span class="legend-swatch" style="background: var(--positive); opacity: 1;"></span>Current quantity</span>
+      <span class="legend-item"><span class="legend-swatch" style="background: var(--negative); opacity: 1;"></span>Negative unrealized P&amp;L</span>
+      <span class="legend-note">Green bars = positive unrealized P&amp;L. Red bars = negative unrealized P&amp;L. Hover a bar for exact values.</span>
+    </div>
+  </div>
+
+  <script>
+const API = '/api/v1';
+
+async function fetchJson(url) {
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error('Request failed: ' + res.status + ' ' + url);
+  }
+  return res.json();
+}
+
+function fmtQty(v) {
+  const text = String(Number(v).toFixed(6)).replace(/\.?0+$/, '');
+  return text === '' || text === '-' ? '0' : text;
+}
+
+function fmtPct(v) {
+  const text = Number(v).toFixed(2).replace(/\.?0+$/, '');
+  return text + '%';
+}
+
+function esc(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+const messageBox = document.getElementById('message');
+
+function showMessage(text, kind) {
+  messageBox.className = 'message ' + kind;
+  messageBox.textContent = text;
+}
+
+const NS = 'http://www.w3.org/2000/svg';
+const VIEW_W = 1000;
+const VIEW_H = 520;
+const MARGIN = { top: 48, right: 24, bottom: 88, left: 64 };
+const PLOT_W = VIEW_W - MARGIN.left - MARGIN.right;
+const PLOT_H = VIEW_H - MARGIN.top - MARGIN.bottom;
+const MAX_TICKS = 5;
+
+function svgEl(name, attrs, text) {
+  const node = document.createElementNS(NS, name);
+  for (const key in attrs) {
+    node.setAttribute(key, attrs[key]);
+  }
+  if (text != null) {
+    node.textContent = text;
+  }
+  return node;
+}
+
+function niceStep(rawStep) {
+  const magnitude = Math.pow(10, Math.floor(Math.log10(rawStep)));
+  const normalized = rawStep / magnitude;
+  const factor = normalized >= 5 ? 10 : normalized >= 2 ? 5 : normalized >= 1 ? 2 : 1;
+  return factor * magnitude;
+}
+
+function renderChart(symbols) {
+  const chartBox = document.getElementById('chart');
+  chartBox.innerHTML = '';
+
+  const maxValue = symbols.reduce(
+    (max, symbol) => Math.max(max, symbol.bought, symbol.sold, symbol.current),
+    0
+  );
+  if (maxValue <= 0) {
+    chartBox.innerHTML = '<p class="empty">No shares to visualize.</p>';
+    return;
+  }
+
+  const step = niceStep(maxValue / MAX_TICKS);
+  const top = Math.ceil(maxValue / step) * step;
+
+  const svg = svgEl('svg', {
+    viewBox: '0 0 ' + VIEW_W + ' ' + VIEW_H,
+    role: 'img',
+    'aria-label': 'Bar chart of shares bought, sold, and current quantity by position',
+  });
+
+  svg.appendChild(svgEl('rect', {
+    x: MARGIN.left,
+    y: MARGIN.top,
+    width: PLOT_W,
+    height: PLOT_H,
+    rx: 8,
+    fill: 'var(--surface)',
+  }));
+
+  // Horizontal gridlines and y-axis labels.
+  const tickCount = Math.round(top / step);
+  for (let i = 0; i <= tickCount; i++) {
+    const value = i * step;
+    const y = MARGIN.top + PLOT_H - (value / top) * PLOT_H;
+    svg.appendChild(svgEl('line', {
+      x1: MARGIN.left,
+      y1: y,
+      x2: VIEW_W - MARGIN.right,
+      y2: y,
+      'class': 'grid-line',
+    }));
+    svg.appendChild(svgEl('text', {
+      x: MARGIN.left - 10,
+      y: y + 4,
+      'class': 'axis-label',
+      'text-anchor': 'end',
+    }, fmtQty(value)));
+  }
+
+  // Axes.
+  svg.appendChild(svgEl('line', {
+    x1: MARGIN.left,
+    y1: MARGIN.top,
+    x2: MARGIN.left,
+    y2: MARGIN.top + PLOT_H,
+    stroke: 'var(--border)',
+    'stroke-width': 1,
+  }));
+  svg.appendChild(svgEl('line', {
+    x1: MARGIN.left,
+    y1: MARGIN.top + PLOT_H,
+    x2: VIEW_W - MARGIN.right,
+    y2: MARGIN.top + PLOT_H,
+    stroke: 'var(--border)',
+    'stroke-width': 1,
+  }));
+
+  const groupW = PLOT_W / symbols.length;
+  const barW = Math.max(8, groupW * 0.22);
+  const gap = (groupW - barW * 3) / 4;
+  const bars = [];
+
+  symbols.forEach((symbol, index) => {
+    const groupX = MARGIN.left + groupW * index + gap;
+    const center = groupX + barW * 1.5 + gap * 2;
+    const color = symbol.pl >= 0 ? 'var(--positive)' : 'var(--negative)';
+
+    const metrics = [
+      { value: symbol.bought, shade: 0.35, label: 'Bought' },
+      { value: symbol.sold, shade: 0.6, label: 'Sold' },
+      { value: symbol.current, shade: 1, label: 'Current quantity' },
+    ];
+
+    metrics.forEach((metric, barIndex) => {
+      const x = groupX + barIndex * (barW + gap);
+      const height = (metric.value / top) * PLOT_H;
+      const y = MARGIN.top + PLOT_H - height;
+      const rect = svgEl('rect', {
+        x: x,
+        y: y,
+        width: barW,
+        height: height,
+        rx: 3,
+        fill: color,
+        'fill-opacity': metric.shade,
+        opacity: 0,
+        'class': 'bar',
+      });
+      rect.appendChild(svgEl('title', null,
+        symbol.symbol + ' · ' + metric.label + ': ' + fmtQty(metric.value)));
+      svg.appendChild(rect);
+      bars.push(rect);
+    });
+
+    // Symbol label and its unrealized P&L percentage.
+    svg.appendChild(svgEl('text', {
+      x: center,
+      y: MARGIN.top + PLOT_H + 26,
+      'class': 'axis-label',
+      'text-anchor': 'middle',
+      'font-weight': '600',
+    }, symbol.symbol));
+    svg.appendChild(svgEl('text', {
+      x: center,
+      y: MARGIN.top + PLOT_H + 44,
+      'class': 'pl-note',
+      'text-anchor': 'middle',
+    }, symbol.pl >= 0
+      ? '\u25b2 ' + fmtPct(symbol.plPercent)
+      : '\u25bc ' + fmtPct(Math.abs(symbol.plPercent))));
+
+    // Current quantity value label above the tallest bar in the group.
+    const groupMax = Math.max(symbol.bought, symbol.sold, symbol.current);
+    const labelY = MARGIN.top + PLOT_H - (groupMax / top) * PLOT_H - 6;
+    svg.appendChild(svgEl('text', {
+      x: center,
+      y: labelY,
+      'class': 'bar-value',
+      'text-anchor': 'middle',
+    }, fmtQty(symbol.current)));
+  });
+
+  // Reveal the bars in a staggered animation.
+  requestAnimationFrame(() => {
+    bars.forEach((rect, i) => {
+      setTimeout(() => { rect.style.opacity = '1'; }, i * 12);
+    });
+  });
+
+  chartBox.appendChild(svg);
+}
+
+async function load() {
+  showMessage('Loading...', '');
+  try {
+    const [holdings, trades] = await Promise.all([
+      fetchJson(API + '/holdings'),
+      fetchJson(API + '/trades'),
+    ]);
+
+    const totals = new Map();
+    function entryFor(symbol) {
+      if (!totals.has(symbol)) {
+        totals.set(symbol, {
+          symbol: symbol,
+          bought: 0,
+          sold: 0,
+          current: 0,
+          pl: 0,
+          plPercent: 0,
+        });
+      }
+      return totals.get(symbol);
+    }
+
+    for (const trade of trades) {
+      if (trade.trade_type === 'dividend') {
+        continue;
+      }
+      const entry = entryFor(trade.symbol);
+      const quantity = Number(trade.quantity) || 0;
+      if (trade.trade_type === 'buy') {
+        entry.bought += quantity;
+      } else if (trade.trade_type === 'sell') {
+        entry.sold += quantity;
+      }
+    }
+
+    for (const holding of holdings) {
+      const entry = entryFor(holding.symbol);
+      entry.current = Number(holding.quantity) || 0;
+      entry.pl = Number(holding.unrealized_pl) || 0;
+      entry.plPercent = Number(holding.unrealized_pl_percent) || 0;
+    }
+
+    const symbols = Array.from(totals.values())
+      .filter((symbol) => symbol.bought > 0 || symbol.sold > 0 || symbol.current > 0)
+      .sort((a, b) => a.symbol.localeCompare(b.symbol));
+
+    if (!symbols.length) {
+      showMessage('No holdings or trades to visualize.', 'error');
+      return;
+    }
+
+    renderChart(symbols);
+    showMessage('', '');
+  } catch (error) {
+    showMessage(error.message, 'error');
+  }
+}
+
+load();
+  </script>
+</body>
+</html>

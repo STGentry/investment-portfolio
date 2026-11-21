@@ -8,7 +8,7 @@ machine (the "app server") and stores data in SQLite.
 - Single brokerage account with multiple owners sharing positions by percentage
 - Fractional share quantities
 - Full audit trail of all buy/sell/dividend trades
-- Dashboard, trade entry form, and ownership split editor (static HTML/CSS, no build step)
+- Dashboard, trade entry form, ownership split editor, and visualizations (static HTML/CSS, no build step)
 
 ## Requirements
 
@@ -112,6 +112,7 @@ investment-portfolio/
 │       ├── index.html         # Dashboard
 │       ├── trades.html        # Trade entry form
 │       ├── holdings_edit.html # Holdings editor
+│       ├── visualizations.html # Charts (bought/sold vs current quantity)
 │       └── css/style.css
 └── data/
     └── seed_portfolio.csv     # Migration source data
