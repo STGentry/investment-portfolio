@@ -26,18 +26,19 @@
     <div class="section-title">Shares Bought vs Sold vs Current Quantity</div>
     <div class="card">
       <div class="chart-header">
-        <div class="chart-title">Shares by Position</div>
-        <div class="chart-sub">Bought and sold share counts from the trade history, compared with the current quantity of each position.</div>
+        <div class="chart-title">Position Quantity Evolution</div>
+        <div class="chart-sub">Each bar stacks the shares bought, sold, and currently held for a position. The current quantity is the top segment of every bar.</div>
       </div>
       <div id="chart"></div>
+      <div id="chart-tooltip" class="chart-tooltip" hidden></div>
     </div>
 
     <div class="chart-legend">
       <span class="legend-item"><span class="legend-swatch" style="background: var(--positive); opacity: 0.35;"></span>Bought</span>
       <span class="legend-item"><span class="legend-swatch" style="background: var(--positive); opacity: 0.6;"></span>Sold</span>
-      <span class="legend-item"><span class="legend-swatch" style="background: var(--positive); opacity: 1;"></span>Current quantity</span>
+      <span class="legend-item"><span class="legend-swatch" style="background: var(--positive); opacity: 1;"></span>Current quantity (top)</span>
       <span class="legend-item"><span class="legend-swatch" style="background: var(--negative); opacity: 1;"></span>Negative unrealized P&amp;L</span>
-      <span class="legend-note">Green bars = positive unrealized P&amp;L. Red bars = negative unrealized P&amp;L. Hover a bar for exact values.</span>
+      <span class="legend-note">Bars stack bought, sold, and current quantity. Green = positive unrealized P&amp;L. Red = negative. Hover a bar for quantities.</span>
     </div>
   </div>
 
@@ -57,9 +58,10 @@ function fmtQty(v) {
   return text === '' || text === '-' ? '0' : text;
 }
 
-function fmtPct(v) {
-  const text = Number(v).toFixed(2).replace(/\.?0+$/, '');
-  return text + '%';
+function fmtSignedPct(v) {
+  const sign = Number(v) < 0 ? '-' : '+';
+  const text = Math.abs(Number(v)).toFixed(2).replace(/\.?0+$/, '');
+  return sign + text + '%';
 }
 
 function esc(value) {
@@ -103,12 +105,35 @@ function niceStep(rawStep) {
   return factor * magnitude;
 }
 
+const tooltipBox = document.getElementById('chart-tooltip');
+
+function attachTooltip(rect, symbol) {
+  rect.addEventListener('mouseenter', (event) => {
+    tooltipBox.innerHTML =
+      '<div class="tip-symbol">' + esc(symbol.symbol) + '</div>' +
+      '<div class="tip-row"><span class="tip-label bought">Bought</span><span>' + fmtQty(symbol.bought) + '</span></div>' +
+      '<div class="tip-row"><span class="tip-label sold">Sold</span><span>' + fmtQty(symbol.sold) + '</span></div>' +
+      '<div class="tip-row"><span class="tip-label current">Current</span><span>' + fmtQty(symbol.current) + '</span></div>' +
+      '<div class="tip-row"><span class="tip-label pl ' + (symbol.pl >= 0 ? 'positive' : 'negative') +
+        '">Unrealized P&amp;L</span><span>' + fmtSignedPct(symbol.plPercent) + '</span></div>';
+    tooltipBox.hidden = false;
+    moveTooltip(event);
+  });
+  rect.addEventListener('mousemove', moveTooltip);
+  rect.addEventListener('mouseleave', () => { tooltipBox.hidden = true; });
+}
+
+function moveTooltip(event) {
+  tooltipBox.style.left = (event.clientX + 14) + 'px';
+  tooltipBox.style.top = (event.clientY + 14) + 'px';
+}
+
 function renderChart(symbols) {
   const chartBox = document.getElementById('chart');
   chartBox.innerHTML = '';
 
   const maxValue = symbols.reduce(
-    (max, symbol) => Math.max(max, symbol.bought, symbol.sold, symbol.current),
+    (max, symbol) => Math.max(max, symbol.bought + symbol.sold + symbol.current),
     0
   );
   if (maxValue <= 0) {
@@ -122,7 +147,7 @@ function renderChart(symbols) {
   const svg = svgEl('svg', {
     viewBox: '0 0 ' + VIEW_W + ' ' + VIEW_H,
     role: 'img',
-    'aria-label': 'Bar chart of shares bought, sold, and current quantity by position',
+    'aria-label': 'Stacked bar chart of shares bought, sold, and current quantity by position',
   });
 
   svg.appendChild(svgEl('rect', {
@@ -173,74 +198,69 @@ function renderChart(symbols) {
   }));
 
   const groupW = PLOT_W / symbols.length;
-  const barW = Math.max(8, groupW * 0.22);
-  const gap = (groupW - barW * 3) / 4;
+  const barW = Math.max(24, groupW * 0.55);
+
   const bars = [];
 
   symbols.forEach((symbol, index) => {
-    const groupX = MARGIN.left + groupW * index + gap;
-    const center = groupX + barW * 1.5 + gap * 2;
+    const centerX = MARGIN.left + groupW * index + groupW / 2;
+    const x = centerX - barW / 2;
+    const baseline = MARGIN.top + PLOT_H;
     const color = symbol.pl >= 0 ? 'var(--positive)' : 'var(--negative)';
+    const height = (symbol.bought + symbol.sold + symbol.current) / top * PLOT_H;
 
-    const metrics = [
-      { value: symbol.bought, shade: 0.35, label: 'Bought' },
-      { value: symbol.sold, shade: 0.6, label: 'Sold' },
-      { value: symbol.current, shade: 1, label: 'Current quantity' },
+    // Segments stack bottom-to-top: bought, sold, current.
+    const segments = [
+      { key: 'bought', value: symbol.bought, shade: 0.35, label: 'Bought' },
+      { key: 'sold', value: symbol.sold, shade: 0.6, label: 'Sold' },
+      { key: 'current', value: symbol.current, shade: 1, label: 'Current quantity' },
     ];
 
-    metrics.forEach((metric, barIndex) => {
-      const x = groupX + barIndex * (barW + gap);
-      const height = (metric.value / top) * PLOT_H;
-      const y = MARGIN.top + PLOT_H - height;
+    let consumed = 0;
+    segments.forEach((segment) => {
+      const segmentHeight = segment.value / top * PLOT_H;
+      const y = baseline - (consumed + segment.value) / top * PLOT_H;
       const rect = svgEl('rect', {
         x: x,
         y: y,
         width: barW,
-        height: height,
+        height: segmentHeight,
         rx: 3,
         fill: color,
-        'fill-opacity': metric.shade,
+        'fill-opacity': segment.shade,
         opacity: 0,
-        'class': 'bar',
+        'class': 'bar-segment',
+        'data-symbol': symbol.symbol,
+        'data-metric': segment.key,
       });
-      rect.appendChild(svgEl('title', null,
-        symbol.symbol + ' · ' + metric.label + ': ' + fmtQty(metric.value)));
+      attachTooltip(rect, symbol);
       svg.appendChild(rect);
       bars.push(rect);
+      consumed += segment.value;
     });
 
-    // Symbol label and its unrealized P&L percentage.
+    // Unrealized P&L callout above the bar.
     svg.appendChild(svgEl('text', {
-      x: center,
-      y: MARGIN.top + PLOT_H + 26,
+      x: centerX,
+      y: baseline - height - 8,
+      'class': symbol.pl >= 0 ? 'callout positive' : 'callout negative',
+      'text-anchor': 'middle',
+    }, fmtSignedPct(symbol.plPercent)));
+
+    // Symbol label below the bar.
+    svg.appendChild(svgEl('text', {
+      x: centerX,
+      y: baseline + 26,
       'class': 'axis-label',
       'text-anchor': 'middle',
       'font-weight': '600',
     }, symbol.symbol));
-    svg.appendChild(svgEl('text', {
-      x: center,
-      y: MARGIN.top + PLOT_H + 44,
-      'class': 'pl-note',
-      'text-anchor': 'middle',
-    }, symbol.pl >= 0
-      ? '\u25b2 ' + fmtPct(symbol.plPercent)
-      : '\u25bc ' + fmtPct(Math.abs(symbol.plPercent))));
-
-    // Current quantity value label above the tallest bar in the group.
-    const groupMax = Math.max(symbol.bought, symbol.sold, symbol.current);
-    const labelY = MARGIN.top + PLOT_H - (groupMax / top) * PLOT_H - 6;
-    svg.appendChild(svgEl('text', {
-      x: center,
-      y: labelY,
-      'class': 'bar-value',
-      'text-anchor': 'middle',
-    }, fmtQty(symbol.current)));
   });
 
   // Reveal the bars in a staggered animation.
   requestAnimationFrame(() => {
     bars.forEach((rect, i) => {
-      setTimeout(() => { rect.style.opacity = '1'; }, i * 12);
+      setTimeout(() => { rect.style.opacity = '1'; }, i * 8);
     });
   });
 
