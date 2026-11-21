@@ -268,8 +268,12 @@ input.invalid, select.invalid { border-color: var(--negative); }
 #chart { width: 100%; overflow-x: auto; }
 #chart svg { display: block; width: 100%; height: auto; }
 
-.chart .bar-segment { transition: opacity 0.2s ease; }
-.chart .bar-segment:hover { opacity: 0.75; }
+.chart .bar-base,
+.chart .bar-bought,
+.chart .bar-sold { transition: opacity 0.2s ease; }
+.chart .bar-base:hover,
+.chart .bar-bought:hover,
+.chart .bar-sold:hover { opacity: 0.75; }
 
 .chart .axis-label { font-size: 11px; fill: var(--muted); font-family: inherit; }
 .chart .grid-line { stroke: var(--border); stroke-width: 1; }
@@ -299,6 +303,7 @@ input.invalid, select.invalid { border-color: var(--negative); }
 .chart-tooltip[hidden] { display: none; }
 .chart-tooltip .tip-symbol { font-weight: 700; margin-bottom: 4px; }
 .chart-tooltip .tip-row { display: flex; justify-content: space-between; gap: 8px; }
+.chart-tooltip .tip-row.active { background: #eef2f6; }
 .chart-tooltip .tip-label { color: var(--muted); }
 .chart-tooltip .tip-label.bought { opacity: 0.35; }
 .chart-tooltip .tip-label.sold { opacity: 0.6; }
