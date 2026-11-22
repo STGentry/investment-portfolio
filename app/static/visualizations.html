@@ -171,6 +171,8 @@ function renderChart(symbols) {
 
   const svg = svgEl('svg', {
     viewBox: '0 0 ' + VIEW_W + ' ' + VIEW_H,
+    width: VIEW_W,
+    height: VIEW_H,
     role: 'img',
     'aria-label': 'Stacked bar chart of shares bought, sold, and current quantity by position',
   });
@@ -323,11 +325,12 @@ function renderChart(symbols) {
 
 // Sector mix: the inner ring shows each sector's share of held quantity,
 // the outer ring shows each sector's share of current value.
-const SECTOR_VIEW_W = 360;
-const SECTOR_VIEW_H = 360;
-const SECTOR_CENTER = 180;
-const SECTOR_INNER_RADIUS = 64;
-const SECTOR_OUTER_RADIUS = 118;
+const SECTOR_VIEW_W = 800;
+const SECTOR_VIEW_H = 416;
+const SECTOR_CENTER_X = 400;
+const SECTOR_CENTER_Y = 208;
+const SECTOR_INNER_RADIUS = 87;
+const SECTOR_OUTER_RADIUS = 160;
 const SECTOR_PALETTE = [
   '#4c72b0', '#dd8452', '#55a868', '#c44e52', '#8172b3',
   '#937860', '#da8bc3', '#8c8c8c', '#ccb974', '#64b5cd',
@@ -337,8 +340,8 @@ const SECTOR_PALETTE = [
 function sectorPoint(radius, angle) {
   const radians = (angle * Math.PI) / 180;
   return {
-    x: SECTOR_CENTER + radius * Math.sin(radians),
-    y: SECTOR_CENTER - radius * Math.cos(radians),
+    x: SECTOR_CENTER_X + radius * Math.sin(radians),
+    y: SECTOR_CENTER_Y - radius * Math.cos(radians),
   };
 }
 
@@ -352,7 +355,7 @@ function sectorArc(radius, startAngle, endAngle) {
 
 function pieSlicePath(radius, startAngle, endAngle) {
   const start = sectorPoint(radius, startAngle);
-  return 'M ' + SECTOR_CENTER + ' ' + SECTOR_CENTER +
+  return 'M ' + SECTOR_CENTER_X + ' ' + SECTOR_CENTER_Y +
     ' L ' + start.x.toFixed(2) + ' ' + start.y.toFixed(2) +
     ' ' + sectorArc(radius, startAngle, endAngle) + ' Z';
 }
@@ -428,18 +431,38 @@ function renderSectorChart(holdings) {
 
   const svg = svgEl('svg', {
     viewBox: '0 0 ' + SECTOR_VIEW_W + ' ' + SECTOR_VIEW_H,
+    width: SECTOR_VIEW_W,
+    height: SECTOR_VIEW_H,
     role: 'img',
-    'aria-label': 'Sector mix: inner ring shows quantity share, outer ring shows current value share',
+    'aria-label': 'Sector mix: inner ring shows share of held quantity, outer ring shows share of current value',
   });
 
   svg.appendChild(svgEl('circle', {
-    cx: SECTOR_CENTER,
-    cy: SECTOR_CENTER,
+    cx: SECTOR_CENTER_X,
+    cy: SECTOR_CENTER_Y,
     r: SECTOR_OUTER_RADIUS + 4,
     fill: 'var(--surface)',
     stroke: 'var(--border)',
     'stroke-width': 1,
   }));
+
+  // Ring labels: the inner ring shows each sector's share of held quantity,
+  // the outer ring shows each sector's share of current value.
+  svg.appendChild(svgEl('text', {
+    x: SECTOR_CENTER_X,
+    y: SECTOR_CENTER_Y - SECTOR_OUTER_RADIUS - 30,
+    'class': 'ring-label',
+    'text-anchor': 'middle',
+    'dominant-baseline': 'middle',
+  }, 'Inner ring: share of held quantity'));
+
+  svg.appendChild(svgEl('text', {
+    x: SECTOR_CENTER_X,
+    y: SECTOR_CENTER_Y + SECTOR_OUTER_RADIUS + 30,
+    'class': 'ring-label',
+    'text-anchor': 'middle',
+    'dominant-baseline': 'middle',
+  }, 'Outer ring: share of current value'));
 
   let quantityCursor = 0;
   let valueCursor = 0;

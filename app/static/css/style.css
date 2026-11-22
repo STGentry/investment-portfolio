@@ -333,7 +333,7 @@ input.invalid, select.invalid { border-color: var(--negative); }
 /* Visualization cards (visualizations page) */
 .viz-grid {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 16px;
   align-items: start;
 }
@@ -356,9 +356,14 @@ input.invalid, select.invalid { border-color: var(--negative); }
 .sector-chart svg {
   display: block;
   width: 100%;
-  max-width: 420px;
   height: auto;
-  margin: 0 auto;
+}
+
+.sector-chart .ring-label {
+  font-size: 12px;
+  font-weight: 600;
+  fill: var(--muted);
+  font-family: inherit;
 }
 
 .sector-chart .sector-path {
