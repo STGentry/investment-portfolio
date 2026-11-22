@@ -11,7 +11,7 @@
     <header class="page">
       <div>
         <h1>Visualizations</h1>
-        <div class="sub">Charts for shares bought, sold, and currently held by position.</div>
+        <div class="sub">Charts for shares bought, sold, currently held, and sector mix.</div>
       </div>
       <nav class="nav">
         <a href="/">Dashboard</a>
@@ -23,22 +23,36 @@
 
     <div class="message" id="message"></div>
 
-    <div class="section-title">Shares Bought vs Sold vs Current Quantity</div>
-    <div class="card">
-      <div class="chart-header">
-        <div class="chart-title">Position Quantity Evolution</div>
-        <div class="chart-sub">Each bar's height is the current quantity, with shares bought and sold overlaid on top. Sold is shown reductively on the bought shares.</div>
-      </div>
-      <div id="chart"></div>
-      <div id="chart-tooltip" class="chart-tooltip" hidden></div>
-    </div>
+    <div class="section-title">Portfolio Visualizations</div>
+    <div class="viz-grid">
+      <div class="viz-column">
+        <div class="card">
+          <div class="chart-header">
+            <div class="chart-title">Position Quantity Evolution</div>
+            <div class="chart-sub">Each bar's height is the current quantity, with shares bought and sold overlaid on top. Sold is shown reductively on the bought shares.</div>
+          </div>
+          <div id="chart"></div>
+          <div id="chart-tooltip" class="chart-tooltip" hidden></div>
+        </div>
 
-    <div class="chart-legend">
-      <span class="legend-item"><span class="legend-swatch" style="background: var(--positive); opacity: 0.35;"></span>Current quantity (base)</span>
-      <span class="legend-item"><span class="legend-swatch" style="background: var(--positive); opacity: 0.6;"></span>Bought</span>
-      <span class="legend-item"><span class="legend-swatch" style="background: var(--positive); opacity: 1;"></span>Sold</span>
-      <span class="legend-item"><span class="legend-swatch" style="background: var(--negative); opacity: 1;"></span>Negative unrealized P&amp;L</span>
-      <span class="legend-note">Current quantity is the base of each bar; bought and sold are overlaid on it. Green = positive unrealized P&amp;L. Red = negative. Hover a bar for quantities.</span>
+        <div class="chart-legend">
+          <span class="legend-item"><span class="legend-swatch" style="background: var(--positive); opacity: 0.35;"></span>Current quantity (base)</span>
+          <span class="legend-item"><span class="legend-swatch" style="background: var(--positive); opacity: 0.6;"></span>Bought</span>
+          <span class="legend-item"><span class="legend-swatch" style="background: var(--positive); opacity: 1;"></span>Sold</span>
+          <span class="legend-item"><span class="legend-swatch" style="background: var(--negative); opacity: 1;"></span>Negative unrealized P&amp;L</span>
+          <span class="legend-note">Current quantity is the base of each bar; bought and sold are overlaid on it. Green = positive unrealized P&amp;L. Red = negative. Hover a bar for quantities.</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="chart-header">
+          <div class="chart-title">Sector Mix</div>
+          <div class="chart-sub">Inner ring: share of held quantity by sector. Outer ring: share of current value by sector.</div>
+        </div>
+        <div id="sector-chart"></div>
+        <div id="sector-tooltip" class="chart-tooltip" hidden></div>
+        <div id="sector-legend" class="sector-legend"></div>
+      </div>
     </div>
   </div>
 
@@ -64,6 +78,16 @@ function fmtSignedPct(v) {
   return sign + text + '%';
 }
 
+function fmtMoney(v) {
+  const negative = v < 0;
+  const text = Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return (negative ? '-$' : '$') + text;
+}
+
+function fmtPct(v) {
+  return Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
+}
+
 function esc(value) {
   return String(value == null ? '' : value)
     .replace(/&/g, '&amp;')
@@ -80,9 +104,9 @@ function showMessage(text, kind) {
 }
 
 const NS = 'http://www.w3.org/2000/svg';
-const VIEW_W = 1000;
-const VIEW_H = 520;
-const MARGIN = { top: 48, right: 24, bottom: 88, left: 64 };
+const VIEW_W = 800;
+const VIEW_H = 416;
+const MARGIN = { top: 38, right: 19, bottom: 70, left: 51 };
 const PLOT_W = VIEW_W - MARGIN.left - MARGIN.right;
 const PLOT_H = VIEW_H - MARGIN.top - MARGIN.bottom;
 const MAX_TICKS = 5;
@@ -124,9 +148,9 @@ function attachTooltip(rect, symbol, metric) {
   rect.addEventListener('mouseleave', () => { tooltipBox.hidden = true; });
 }
 
-function moveTooltip(event) {
-  tooltipBox.style.left = (event.clientX + 14) + 'px';
-  tooltipBox.style.top = (event.clientY + 14) + 'px';
+function moveTooltip(event, box = tooltipBox) {
+  box.style.left = (event.clientX + 14) + 'px';
+  box.style.top = (event.clientY + 14) + 'px';
 }
 
 function renderChart(symbols) {
@@ -173,8 +197,8 @@ function renderChart(symbols) {
       'class': 'grid-line',
     }));
     svg.appendChild(svgEl('text', {
-      x: MARGIN.left - 10,
-      y: y + 4,
+      x: MARGIN.left - 8,
+      y: y + 3,
       'class': 'axis-label',
       'text-anchor': 'end',
     }, fmtQty(value)));
@@ -272,7 +296,7 @@ function renderChart(symbols) {
     // Unrealized P&L callout above the bar.
     svg.appendChild(svgEl('text', {
       x: centerX,
-      y: baseline - currentHeight - 8,
+      y: baseline - currentHeight - 6,
       'class': symbol.pl >= 0 ? 'callout positive' : 'callout negative',
       'text-anchor': 'middle',
     }, fmtSignedPct(symbol.plPercent)));
@@ -280,7 +304,7 @@ function renderChart(symbols) {
     // Symbol label below the bar.
     svg.appendChild(svgEl('text', {
       x: centerX,
-      y: baseline + 26,
+      y: baseline + 21,
       'class': 'axis-label',
       'text-anchor': 'middle',
       'font-weight': '600',
@@ -297,6 +321,178 @@ function renderChart(symbols) {
   chartBox.appendChild(svg);
 }
 
+// Sector mix: the inner ring shows each sector's share of held quantity,
+// the outer ring shows each sector's share of current value.
+const SECTOR_VIEW_W = 360;
+const SECTOR_VIEW_H = 360;
+const SECTOR_CENTER = 180;
+const SECTOR_INNER_RADIUS = 64;
+const SECTOR_OUTER_RADIUS = 118;
+const SECTOR_PALETTE = [
+  '#4c72b0', '#dd8452', '#55a868', '#c44e52', '#8172b3',
+  '#937860', '#da8bc3', '#8c8c8c', '#ccb974', '#64b5cd',
+  '#e24a33', '#3483a2',
+];
+
+function sectorPoint(radius, angle) {
+  const radians = (angle * Math.PI) / 180;
+  return {
+    x: SECTOR_CENTER + radius * Math.sin(radians),
+    y: SECTOR_CENTER - radius * Math.cos(radians),
+  };
+}
+
+function sectorArc(radius, startAngle, endAngle) {
+  const end = sectorPoint(radius, endAngle);
+  const sweep = endAngle >= startAngle ? 1 : 0;
+  const largeArc = Math.abs(endAngle - startAngle) > 180 ? 1 : 0;
+  return 'A ' + radius + ' ' + radius + ' 0 ' + largeArc + ' ' + sweep + ' ' +
+    end.x.toFixed(2) + ' ' + end.y.toFixed(2);
+}
+
+function pieSlicePath(radius, startAngle, endAngle) {
+  const start = sectorPoint(radius, startAngle);
+  return 'M ' + SECTOR_CENTER + ' ' + SECTOR_CENTER +
+    ' L ' + start.x.toFixed(2) + ' ' + start.y.toFixed(2) +
+    ' ' + sectorArc(radius, startAngle, endAngle) + ' Z';
+}
+
+function wheelSlicePath(innerRadius, outerRadius, startAngle, endAngle) {
+  const outerStart = sectorPoint(outerRadius, startAngle);
+  const outerEnd = sectorPoint(outerRadius, endAngle);
+  const innerEnd = sectorPoint(innerRadius, endAngle);
+  const innerStart = sectorPoint(innerRadius, startAngle);
+  const outerSweep = endAngle >= startAngle ? 1 : 0;
+  const innerSweep = outerSweep === 1 ? 0 : 1;
+  const largeArc = Math.abs(endAngle - startAngle) > 180 ? 1 : 0;
+  const outerArc = 'A ' + outerRadius + ' ' + outerRadius + ' 0 ' + largeArc + ' ' + outerSweep + ' ' +
+    outerEnd.x.toFixed(2) + ' ' + outerEnd.y.toFixed(2);
+  const innerArc = 'A ' + innerRadius + ' ' + innerRadius + ' 0 ' + largeArc + ' ' + innerSweep + ' ' +
+    innerStart.x.toFixed(2) + ' ' + innerStart.y.toFixed(2);
+  return 'M ' + outerStart.x.toFixed(2) + ' ' + outerStart.y.toFixed(2) +
+    ' ' + outerArc +
+    ' L ' + innerEnd.x.toFixed(2) + ' ' + innerEnd.y.toFixed(2) +
+    ' ' + innerArc + ' Z';
+}
+const sectorTooltipBox = document.getElementById('sector-tooltip');
+
+function attachSectorTooltip(path, sector) {
+  path.addEventListener('mouseenter', (event) => {
+    sectorTooltipBox.innerHTML =
+      '<div class="tip-symbol">' + esc(sector.sector) + '</div>' +
+      '<div class="tip-row"><span class="tip-label">Quantity</span><span>' + fmtQty(sector.quantity) + '</span></div>' +
+      '<div class="tip-row"><span class="tip-label">Current value</span><span>' + fmtMoney(sector.value) + '</span></div>' +
+      '<div class="tip-row"><span class="tip-label">Quantity share</span><span>' + fmtPct(sector.quantityShare * 100) + '</span></div>' +
+      '<div class="tip-row"><span class="tip-label">Value share</span><span>' + fmtPct(sector.valueShare * 100) + '</span></div>';
+    sectorTooltipBox.hidden = false;
+    moveTooltip(event, sectorTooltipBox);
+  });
+  path.addEventListener('mousemove', (event) => moveTooltip(event, sectorTooltipBox));
+  path.addEventListener('mouseleave', () => { sectorTooltipBox.hidden = true; });
+}
+function renderSectorChart(holdings) {
+  const chartBox = document.getElementById('sector-chart');
+  const legendBox = document.getElementById('sector-legend');
+  chartBox.innerHTML = '';
+  legendBox.innerHTML = '';
+
+  const totals = new Map();
+  for (const holding of holdings) {
+    const sector = String(holding.sector || 'Uncategorized').trim() || 'Uncategorized';
+    const quantity = Number(holding.quantity) || 0;
+    const value = Number(holding.current_value) || 0;
+    if (!totals.has(sector)) {
+      totals.set(sector, { sector: sector, quantity: 0, value: 0 });
+    }
+    const entry = totals.get(sector);
+    entry.quantity += quantity;
+    entry.value += value;
+  }
+
+  const sectors = Array.from(totals.values())
+    .filter((sector) => sector.quantity > 0 || sector.value > 0)
+    .sort((a, b) => b.quantity - a.quantity);
+
+  if (!sectors.length) {
+    chartBox.innerHTML = '<p class="empty">No sector data available.</p>';
+    return;
+  }
+
+  const totalQuantity = sectors.reduce((sum, sector) => sum + sector.quantity, 0);
+  const totalValue = sectors.reduce((sum, sector) => sum + sector.value, 0);
+
+  sectors.forEach((sector) => {
+    sector.quantityShare = totalQuantity > 0 ? sector.quantity / totalQuantity : 0;
+    sector.valueShare = totalValue > 0 ? sector.value / totalValue : 0;
+  });
+
+  const svg = svgEl('svg', {
+    viewBox: '0 0 ' + SECTOR_VIEW_W + ' ' + SECTOR_VIEW_H,
+    role: 'img',
+    'aria-label': 'Sector mix: inner ring shows quantity share, outer ring shows current value share',
+  });
+
+  svg.appendChild(svgEl('circle', {
+    cx: SECTOR_CENTER,
+    cy: SECTOR_CENTER,
+    r: SECTOR_OUTER_RADIUS + 4,
+    fill: 'var(--surface)',
+    stroke: 'var(--border)',
+    'stroke-width': 1,
+  }));
+
+  let quantityCursor = 0;
+  let valueCursor = 0;
+
+  sectors.forEach((sector, index) => {
+    const color = SECTOR_PALETTE[index % SECTOR_PALETTE.length];
+
+    const quantityStart = quantityCursor;
+    quantityCursor += sector.quantityShare * 360;
+    const quantityEnd = quantityCursor;
+
+    const valueStart = valueCursor;
+    valueCursor += sector.valueShare * 360;
+    const valueEnd = valueCursor;
+
+    const pie = svgEl('path', {
+      d: pieSlicePath(SECTOR_INNER_RADIUS, quantityStart, quantityEnd),
+      fill: color,
+      'fill-opacity': 0.85,
+      stroke: '#ffffff',
+      'stroke-opacity': 0.8,
+      'stroke-width': 1,
+      'class': 'sector-path',
+    });
+    attachSectorTooltip(pie, sector);
+    svg.appendChild(pie);
+
+    const wheel = svgEl('path', {
+      d: wheelSlicePath(SECTOR_INNER_RADIUS, SECTOR_OUTER_RADIUS, valueStart, valueEnd),
+      fill: color,
+      'fill-opacity': 0.85,
+      stroke: '#ffffff',
+      'stroke-opacity': 0.8,
+      'stroke-width': 1,
+      'class': 'sector-path',
+    });
+    attachSectorTooltip(wheel, sector);
+    svg.appendChild(wheel);
+  });
+
+  chartBox.appendChild(svg);
+
+  legendBox.innerHTML = sectors.map((sector, index) => {
+    const color = SECTOR_PALETTE[index % SECTOR_PALETTE.length];
+    return '<div class="sector-legend-item">' +
+      '<span class="sector-legend-swatch" style="background: ' + color + ';"></span>' +
+      '<span class="sector-legend-name">' + esc(sector.sector) + '</span>' +
+      '<span class="sector-legend-metrics">' +
+        '<span>Qty ' + fmtQty(sector.quantity) + '</span>' +
+        '<span>Value ' + fmtMoney(sector.value) + '</span>' +
+      '</span></div>';
+  }).join('');
+}
 async function load() {
   showMessage('Loading...', '');
   try {
@@ -350,6 +546,7 @@ async function load() {
     }
 
     renderChart(symbols);
+    renderSectorChart(holdings);
     showMessage('', '');
   } catch (error) {
     showMessage(error.message, 'error');

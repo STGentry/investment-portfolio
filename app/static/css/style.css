@@ -330,3 +330,71 @@ input.invalid, select.invalid { border-color: var(--negative); }
   border: 1px solid var(--border);
   flex: none;
 }
+/* Visualization cards (visualizations page) */
+.viz-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.viz-column {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.viz-grid .card { min-width: 0; }
+
+@media (max-width: 1100px) {
+  .viz-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Sector wheel (visualizations page) */
+.sector-chart { width: 100%; }
+
+.sector-chart svg {
+  display: block;
+  width: 100%;
+  max-width: 420px;
+  height: auto;
+  margin: 0 auto;
+}
+
+.sector-chart .sector-path {
+  cursor: pointer;
+  transition: fill-opacity 0.15s ease, stroke 0.15s ease, stroke-width 0.15s ease;
+}
+
+.sector-chart .sector-path:hover {
+  fill-opacity: 0.92;
+  stroke: #ffffff;
+  stroke-opacity: 1;
+  stroke-width: 2;
+}
+
+.sector-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  max-width: 420px;
+  margin: 14px auto 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.sector-legend .sector-legend-item { display: flex; align-items: center; gap: 8px; }
+.sector-legend .sector-legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  flex: none;
+}
+.sector-legend .sector-legend-name { flex: 1; color: var(--text); font-weight: 600; }
+.sector-legend .sector-legend-metrics {
+  display: flex;
+  gap: 14px;
+  font-variant-numeric: tabular-nums;
+}
