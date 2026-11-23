@@ -7,18 +7,52 @@
   <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
-  <div class="container">
+  <div class="page-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <span class="sidebar-title">Investment Portfolio</span>
+        <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-controls="sidebar" aria-expanded="true" aria-label="Collapse navigation">
+          <svg class="sidebar-toggle-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3 6h18M3 12h18M3 18h18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+          </svg>
+        </button>
+      </div>
+      <nav class="sidebar-nav" id="sidebar-nav" aria-label="Main navigation">
+        <a href="/" class="nav-link" title="Dashboard" aria-label="Dashboard">
+          <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
+            <path d="M9 22V12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+            <path d="M15 12v10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+          </svg>
+          <span class="nav-label">Dashboard</span>
+        </a>
+        <a href="/trades.html" class="nav-link" title="Log Trade" aria-label="Log Trade">
+          <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+          </svg>
+          <span class="nav-label">Log Trade</span>
+        </a>
+        <a href="/holdings_edit.html" class="nav-link" title="Holdings Editor" aria-label="Holdings Editor">
+          <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M18.5 2.5a2.12 2.12 0 0 0 3 3L12 15l-4 1 1-4 9.5-12.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <span class="nav-label">Holdings Editor</span>
+        </a>
+        <a href="/visualizations.html" class="nav-link" title="Visualizations" aria-label="Visualizations">
+          <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 19V9M10 19V13M16 19v-5M22 19H2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <span class="nav-label">Visualizations</span>
+        </a>
+      </nav>
+    </aside>
+    <div class="container">
     <header class="page">
       <div>
         <h1>Visualizations</h1>
         <div class="sub">Charts for shares bought, sold, currently held, and sector mix.</div>
       </div>
-      <nav class="nav">
-        <a href="/">Dashboard</a>
-        <a href="/trades.html">Log Trade</a>
-        <a href="/holdings_edit.html">Holdings Editor</a>
-        <a href="/visualizations.html">Visualizations</a>
-      </nav>
     </header>
 
     <div class="message" id="message"></div>
@@ -58,6 +92,7 @@
         <div id="sector-legend" class="sector-legend"></div>
       </div>
     </div>
+  </div>
   </div>
 
   <script>
@@ -704,5 +739,6 @@ async function load() {
 
 load();
   </script>
+  <script src="/js/nav.js"></script>
 </body>
 </html>

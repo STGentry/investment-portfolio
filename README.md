@@ -114,6 +114,8 @@ investment-portfolio/
 │       ├── trades.html        # Trade entry form
 │       ├── holdings_edit.html # Holdings editor
 │       ├── visualizations.html # Charts (bought/sold vs current quantity)
+│       ├── js/
+│       │   └── nav.js         # Collapsible left-hand page navigation
 │       └── css/style.css
 └── data/
     └── seed_portfolio.csv     # Migration source data
