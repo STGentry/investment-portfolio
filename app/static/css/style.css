@@ -287,6 +287,21 @@ input.invalid, select.invalid { border-color: var(--negative); }
 .chart .callout.positive { fill: var(--positive); }
 .chart .callout.negative { fill: var(--negative); }
 
+/* Price context markers above the bars */
+.chart .star,
+.chart .arrow { transition: opacity 0.2s ease; }
+.chart .star.low { fill: var(--negative); }
+.chart .star.high { fill: var(--positive); }
+.chart .arrow.up { fill: var(--positive); }
+.chart .arrow.down { fill: var(--negative); }
+
+.chart-tooltip .tip-label.price { font-weight: 600; }
+.chart-tooltip .tip-label.trend.positive { color: var(--positive); font-weight: 600; }
+.chart-tooltip .tip-label.trend.negative { color: var(--negative); font-weight: 600; }
+
+.chart-legend .legend-icon { display: inline-flex; }
+.chart-legend .legend-icon svg { display: block; }
+
 /* Hover tooltip for chart segments */
 .chart-tooltip {
   position: fixed;

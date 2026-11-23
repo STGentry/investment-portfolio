@@ -5,6 +5,7 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException
 
 from database import db
+from ..services.analytics import price_stats
 
 try:
     import yfinance as yf
@@ -49,6 +50,29 @@ def _latest_close(symbol: str) -> tuple[str, float] | None:
         return None
     price_date = close.index[-1].date().isoformat()
     return price_date, float(close.iloc[-1])
+
+
+def _latest_prices(symbol: str, period: str = "6mo") -> list[tuple[str, float]]:
+    """Return (price_date, close) pairs for a symbol's recent history.
+
+    Falls back to the most recent close when the full history is unavailable.
+    """
+    try:
+        history = yf.Ticker(symbol).history(period=period, interval="1d")
+        close = history["Close"].dropna()
+        if not close.empty:
+            return [
+                (index.date().isoformat(), float(value))
+                for index, value in close.items()
+            ]
+    except Exception:
+        pass
+
+    try:
+        latest = _latest_close(symbol)
+    except Exception:
+        return []
+    return [(latest[0], latest[1])] if latest else []
 
 
 def _payment_dates(ticker) -> list[datetime]:
@@ -128,29 +152,26 @@ def update_prices() -> dict:
         updated = []
         skipped = []
         for symbol in symbols:
-            price = None
+            prices = _latest_prices(symbol)
             dividend = None
-            try:
-                price = _latest_close(symbol)
-            except Exception:
-                price = None
             try:
                 dividend = _latest_dividend(symbol)
             except Exception:
                 dividend = None
 
             entry = {"symbol": symbol}
-            if price is not None:
-                price_date, close_price = price
-                conn.execute(
-                    """
-                    INSERT OR REPLACE INTO prices (symbol, price_date, close_price)
-                    VALUES (?, ?, ?)
-                    """,
-                    (symbol, price_date, close_price),
-                )
-                entry["price_date"] = price_date
-                entry["close_price"] = round(close_price, 2)
+            if prices:
+                for price_date, close_price in prices:
+                    conn.execute(
+                        """
+                        INSERT OR REPLACE INTO prices (symbol, price_date, close_price)
+                        VALUES (?, ?, ?)
+                        """,
+                        (symbol, price_date, close_price),
+                    )
+                entry["price_date"] = prices[-1][0]
+                entry["close_price"] = round(prices[-1][1], 2)
+                entry["history_points"] = len(prices)
             if dividend is not None:
                 amount, frequency = dividend
                 conn.execute(
@@ -165,7 +186,7 @@ def update_prices() -> dict:
                 entry["dividend_amount"] = amount
                 entry["dividend_frequency"] = frequency
 
-            if price is None and dividend is None:
+            if not prices and dividend is None:
                 skipped.append(symbol)
                 continue
             updated.append(entry)
@@ -175,3 +196,11 @@ def update_prices() -> dict:
         "updated": updated,
         "skipped": skipped,
     }
+
+
+@router.get("/prices/stats")
+def get_price_stats() -> list[dict]:
+    """Six-month range and one-month trend for every holding."""
+    with db() as conn:
+        symbols = conn.execute("SELECT symbol FROM holdings ORDER BY symbol").fetchall()
+        return [price_stats(conn, row["symbol"]) for row in symbols]

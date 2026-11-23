@@ -1,8 +1,17 @@
 """Portfolio summary calculations shared by the API routes."""
 
+from datetime import date
 from typing import Any
 
 from database import db
+
+# Trailing windows used for the price context markers on the charts.
+SIX_MONTH_WINDOW_DAYS = 183
+ONE_MONTH_WINDOW_DAYS = 31
+
+# Minimum closes needed before the 6-month range / 1-month trend is reported.
+MIN_SIX_MONTH_POINTS = 10
+MIN_MONTH_POINTS = 5
 
 
 def _to_float(value: Any, default: float = 0.0) -> float:
@@ -78,6 +87,74 @@ def latest_price(conn, symbol: str, fallback: float | None = None) -> float | No
     if row is None:
         return fallback
     return float(row["close_price"])
+
+
+def price_stats(conn, symbol: str) -> dict:
+    """Price context for a symbol: 6-month range and 1-month trend.
+
+    The 6-month low/high are the minimum and maximum closes in the trailing
+    six-month window, and the trend compares the latest close with the
+    earliest close in the trailing one-month window.
+    """
+    rows = conn.execute(
+        "SELECT price_date, close_price FROM prices WHERE symbol = ? ORDER BY price_date",
+        (symbol,),
+    ).fetchall()
+
+    closes: list[tuple[date, float]] = []
+    for row in rows:
+        try:
+            close_date = date.fromisoformat(row["price_date"])
+        except (TypeError, ValueError):
+            continue
+        closes.append((close_date, float(row["close_price"])))
+
+    if not closes:
+        return {
+            "symbol": symbol,
+            "six_month_low": None,
+            "six_month_high": None,
+            "month_ago_price": None,
+            "month_change_percent": None,
+            "trend": "flat",
+            "data_points": 0,
+        }
+
+    latest_date, latest_price = closes[-1]
+    six_month = [
+        price for close_date, price in closes
+        if (latest_date - close_date).days <= SIX_MONTH_WINDOW_DAYS
+    ]
+    month = [
+        price for close_date, price in closes
+        if (latest_date - close_date).days <= ONE_MONTH_WINDOW_DAYS
+    ]
+
+    low = min(six_month)
+    high = max(six_month)
+    month_ago = month[0]
+    change = ((latest_price - month_ago) / month_ago * 100.0) if month_ago else 0.0
+    if change > 0:
+        trend = "up"
+    elif change < 0:
+        trend = "down"
+    else:
+        trend = "flat"
+
+    # Without enough closes the range and trend would be meaningless, so the
+    # markers stay hidden until the price history has been backfilled.
+    enough_range = len(six_month) >= MIN_SIX_MONTH_POINTS
+    enough_trend = len(month) >= MIN_MONTH_POINTS
+
+    return {
+        "symbol": symbol,
+        "six_month_low": round(low, 2) if enough_range else None,
+        "six_month_high": round(high, 2) if enough_range else None,
+        "month_ago_price": round(month_ago, 2) if enough_trend else None,
+        "month_change_percent": round(change, 2) if enough_trend else None,
+        "trend": trend if enough_trend else "flat",
+        "data_points": len(six_month),
+    }
 
 
 def cost_basis_from_trades(conn, symbol: str) -> float:

@@ -40,7 +40,11 @@
           <span class="legend-item"><span class="legend-swatch" style="background: var(--positive); opacity: 0.6;"></span>Bought</span>
           <span class="legend-item"><span class="legend-swatch" style="background: var(--positive); opacity: 1;"></span>Sold</span>
           <span class="legend-item"><span class="legend-swatch" style="background: var(--negative); opacity: 1;"></span>Negative unrealized P&amp;L</span>
-          <span class="legend-note">Current quantity is the base of each bar; bought and sold are overlaid on it. Green = positive unrealized P&amp;L. Red = negative. Hover a bar for quantities.</span>
+          <span class="legend-item"><span class="legend-icon"><svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><polygon points="6,1 8.94,1.95 10.76,4.46 10.76,7.55 8.94,10.05 6,11 3.06,10.05 1.24,7.55 1.24,4.46 3.06,1.95" fill="var(--negative)"/></svg></span>Within 2% of 6-month low</span>
+          <span class="legend-item"><span class="legend-icon"><svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><polygon points="6,1 8.94,1.95 10.76,4.46 10.76,7.55 8.94,10.05 6,11 3.06,10.05 1.24,7.55 1.24,4.46 3.06,1.95" fill="var(--positive)"/></svg></span>Within 2% of 6-month high</span>
+          <span class="legend-item"><span class="legend-icon"><svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><polygon points="4,10 6,2 8,10" fill="var(--positive)"/></svg></span>Price up over 1 month</span>
+          <span class="legend-item"><span class="legend-icon"><svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><polygon points="4,2 6,10 8,2" fill="var(--negative)"/></svg></span>Price down over 1 month</span>
+          <span class="legend-note">Current quantity is the base of each bar; bought and sold are overlaid on it. Green = positive unrealized P&amp;L. Red = negative. Stars mark symbols within 2% of their 6-month low or high; arrows show the 1-month price trend. Hover a bar for details.</span>
         </div>
       </div>
 
@@ -88,6 +92,36 @@ function fmtPct(v) {
   return Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
 }
 
+function fmtMoneyOpt(v) {
+  return v == null || isNaN(Number(v)) ? 'n/a' : fmtMoney(v);
+}
+
+function fmtSignedPctOpt(v) {
+  return v == null || isNaN(Number(v)) ? 'n/a' : fmtSignedPct(v);
+}
+
+// A five-pointed star centred on (cx, cy).
+function starPoints(cx, cy, outerRadius, innerRadius) {
+  const points = [];
+  for (let i = 0; i < 10; i++) {
+    const radius = i % 2 === 0 ? outerRadius : innerRadius;
+    const angle = (i * 36 - 90) * Math.PI / 180;
+    points.push(
+      (cx + radius * Math.cos(angle)).toFixed(2) + ',' +
+      (cy + radius * Math.sin(angle)).toFixed(2)
+    );
+  }
+  return points.join(' ');
+}
+
+// A triangle pointing up (direction > 0) or down (direction < 0).
+function arrowPoints(cx, cy, direction) {
+  const sign = direction > 0 ? 1 : -1;
+  return (cx - 4).toFixed(2) + ',' + (cy + 5 * sign) + ' ' +
+    (cx + 4).toFixed(2) + ',' + (cy + 5 * sign) + ' ' +
+    cx.toFixed(2) + ',' + (cy - 5 * sign);
+}
+
 function esc(value) {
   return String(value == null ? '' : value)
     .replace(/&/g, '&amp;')
@@ -110,6 +144,17 @@ const MARGIN = { top: 38, right: 19, bottom: 70, left: 51 };
 const PLOT_W = VIEW_W - MARGIN.left - MARGIN.right;
 const PLOT_H = VIEW_H - MARGIN.top - MARGIN.bottom;
 const MAX_TICKS = 5;
+
+// Marker placement above each bar's top edge.
+const STAR_OFFSET = 6;
+const ARROW_OFFSET = 18;
+const CALLOUT_OFFSET = 30;
+const STAR_OUTER_RADIUS = 6;
+const STAR_INNER_RADIUS = 2.5;
+
+// A symbol is "at" its 6-month bound when the latest price is within this
+// fraction of the bound.
+const BOUND_TOLERANCE = 0.02;
 
 function svgEl(name, attrs, text) {
   const node = document.createElementNS(NS, name);
@@ -134,13 +179,19 @@ const tooltipBox = document.getElementById('chart-tooltip');
 function attachTooltip(rect, symbol, metric) {
   rect.addEventListener('mouseenter', (event) => {
     const active = (key) => (key === metric ? ' active' : '');
+    const trendClass = symbol.trend === 'up' ? 'positive' : symbol.trend === 'down' ? 'negative' : '';
     tooltipBox.innerHTML =
       '<div class="tip-symbol">' + esc(symbol.symbol) + '</div>' +
       '<div class="tip-row"><span class="tip-label bought' + active('bought') + '">Bought</span><span>' + fmtQty(symbol.bought) + '</span></div>' +
       '<div class="tip-row"><span class="tip-label sold' + active('sold') + '">Sold</span><span>' + fmtQty(symbol.sold) + '</span></div>' +
       '<div class="tip-row"><span class="tip-label current' + active('current') + '">Current</span><span>' + fmtQty(symbol.current) + '</span></div>' +
       '<div class="tip-row"><span class="tip-label pl ' + (symbol.pl >= 0 ? 'positive' : 'negative') +
-        '">Unrealized P&amp;L</span><span>' + fmtSignedPct(symbol.plPercent) + '</span></div>';
+        '">Unrealized P&amp;L</span><span>' + fmtSignedPct(symbol.plPercent) + '</span></div>' +
+      '<div class="tip-row"><span class="tip-label price">Price</span><span>' + fmtMoneyOpt(symbol.currentPrice) + '</span></div>' +
+      '<div class="tip-row"><span class="tip-label">6m low</span><span>' + fmtMoneyOpt(symbol.sixMonthLow) + '</span></div>' +
+      '<div class="tip-row"><span class="tip-label">6m high</span><span>' + fmtMoneyOpt(symbol.sixMonthHigh) + '</span></div>' +
+      '<div class="tip-row"><span class="tip-label trend ' + trendClass + '">1m change</span><span>' + fmtSignedPctOpt(symbol.monthChangePercent) + '</span></div>' +
+      '<div class="tip-row"><span class="tip-label">6m points</span><span>' + (symbol.pricePoints || 0) + '</span></div>';
     tooltipBox.hidden = false;
     moveTooltip(event);
   });
@@ -227,7 +278,7 @@ function renderChart(symbols) {
   const groupW = PLOT_W / symbols.length;
   const barW = Math.max(24, groupW * 0.55);
 
-  const bars = [];
+  const barGroups = [];
 
   symbols.forEach((symbol, index) => {
     const centerX = MARGIN.left + groupW * index + groupW / 2;
@@ -257,7 +308,6 @@ function renderChart(symbols) {
     });
     attachTooltip(base, symbol, 'current');
     svg.appendChild(base);
-    bars.push(base);
 
     // Overlay: shares bought (bought <= current).
     const bought = svgEl('rect', {
@@ -275,7 +325,6 @@ function renderChart(symbols) {
     });
     attachTooltip(bought, symbol, 'bought');
     svg.appendChild(bought);
-    bars.push(bought);
 
     // Overlay: shares sold, reductive of the bought shares.
     const sold = svgEl('rect', {
@@ -293,15 +342,66 @@ function renderChart(symbols) {
     });
     attachTooltip(sold, symbol, 'sold');
     svg.appendChild(sold);
-    bars.push(sold);
 
-    // Unrealized P&L callout above the bar.
-    svg.appendChild(svgEl('text', {
+    const elements = [base, bought, sold];
+    const barTop = baseline - currentHeight;
+
+    // Price context markers. A star marks a symbol within 2% of its 6-month
+    // low (red) or high (green); an arrow shows the 1-month price trend.
+    const price = symbol.currentPrice;
+    const low = symbol.sixMonthLow;
+    const high = symbol.sixMonthHigh;
+    let star = null;
+    if (price != null && low != null && high != null) {
+      const atLow = price <= low * (1 + BOUND_TOLERANCE);
+      const atHigh = price >= high * (1 - BOUND_TOLERANCE);
+      if (atLow && atHigh) {
+        // A narrow range can satisfy both; show the closer bound.
+        const lowGap = (price - low) / low;
+        const highGap = (high - price) / high;
+        star = lowGap <= highGap ? 'low' : 'high';
+      } else if (atLow) {
+        star = 'low';
+      } else if (atHigh) {
+        star = 'high';
+      }
+    }
+    const trend = symbol.trend === 'up' || symbol.trend === 'down' ? symbol.trend : null;
+
+    if (star) {
+      const marker = svgEl('polygon', {
+        points: starPoints(centerX, barTop - STAR_OFFSET, STAR_OUTER_RADIUS, STAR_INNER_RADIUS),
+        'class': 'star ' + star,
+        opacity: 0,
+        'data-symbol': symbol.symbol,
+      });
+      svg.appendChild(marker);
+      elements.push(marker);
+    }
+
+    if (trend) {
+      const marker = svgEl('polygon', {
+        points: arrowPoints(centerX, barTop - ARROW_OFFSET, trend === 'up' ? 1 : -1),
+        'class': 'arrow ' + trend,
+        opacity: 0,
+        'data-symbol': symbol.symbol,
+      });
+      svg.appendChild(marker);
+      elements.push(marker);
+    }
+
+    // Unrealized P&L callout above the markers.
+    const callout = svgEl('text', {
       x: centerX,
-      y: baseline - currentHeight - 6,
+      y: barTop - CALLOUT_OFFSET,
       'class': symbol.pl >= 0 ? 'callout positive' : 'callout negative',
       'text-anchor': 'middle',
-    }, fmtSignedPct(symbol.plPercent)));
+      opacity: 0,
+    }, fmtSignedPct(symbol.plPercent));
+    svg.appendChild(callout);
+    elements.push(callout);
+
+    barGroups.push({ elements, delay: index });
 
     // Symbol label below the bar.
     svg.appendChild(svgEl('text', {
@@ -313,10 +413,12 @@ function renderChart(symbols) {
     }, symbol.symbol));
   });
 
-  // Reveal the bars in a staggered animation.
+  // Reveal each bar and its markers in a staggered animation.
   requestAnimationFrame(() => {
-    bars.forEach((rect, i) => {
-      setTimeout(() => { rect.style.opacity = '1'; }, i * 8);
+    barGroups.forEach(({ elements, delay }) => {
+      setTimeout(() => {
+        elements.forEach((element) => { element.style.opacity = '1'; });
+      }, delay * 8);
     });
   });
 
@@ -519,10 +621,18 @@ function renderSectorChart(holdings) {
 async function load() {
   showMessage('Loading...', '');
   try {
-    const [holdings, trades] = await Promise.all([
+    const [holdings, trades, priceStats] = await Promise.all([
       fetchJson(API + '/holdings'),
       fetchJson(API + '/trades'),
+      fetchJson(API + '/prices/stats').catch(() => []),
     ]);
+
+    const statsBySymbol = new Map();
+    for (const stats of priceStats) {
+      if (stats && stats.symbol) {
+        statsBySymbol.set(stats.symbol, stats);
+      }
+    }
 
     const totals = new Map();
     function entryFor(symbol) {
@@ -532,6 +642,12 @@ async function load() {
           bought: 0,
           sold: 0,
           current: 0,
+          currentPrice: null,
+          sixMonthLow: null,
+          sixMonthHigh: null,
+          monthChangePercent: null,
+          pricePoints: 0,
+          trend: 'flat',
           pl: 0,
           plPercent: 0,
         });
@@ -555,8 +671,18 @@ async function load() {
     for (const holding of holdings) {
       const entry = entryFor(holding.symbol);
       entry.current = Number(holding.quantity) || 0;
+      entry.currentPrice = Number(holding.current_price) || null;
       entry.pl = Number(holding.unrealized_pl) || 0;
       entry.plPercent = Number(holding.unrealized_pl_percent) || 0;
+
+      const stats = statsBySymbol.get(holding.symbol);
+      if (stats) {
+        entry.sixMonthLow = stats.six_month_low ?? null;
+        entry.sixMonthHigh = stats.six_month_high ?? null;
+        entry.monthChangePercent = stats.month_change_percent ?? null;
+        entry.pricePoints = stats.data_points ?? 0;
+        entry.trend = stats.trend || 'flat';
+      }
     }
 
     const symbols = Array.from(totals.values())
