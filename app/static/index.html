@@ -204,6 +204,15 @@ function esc(value) {
     .replace(/"/g, '&quot;');
 }
 
+function saveIcon() {
+  return '<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">' +
+    '<path d="M6 21H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />' +
+    '<polyline points="17 21 17 13 7 13 7 21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />' +
+    '<path d="M7 21V5a2 2 0 0 0-2-2h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />' +
+    '<circle cx="9" cy="21" r="1" fill="currentColor" />' +
+    '</svg>';
+}
+
 function valueClass(v) { return v >= 0 ? 'positive' : 'negative'; }
 
 // Months between dividend payments for the frequencies used by the app.
@@ -569,7 +578,7 @@ function renderHoldings(rows) {
         'data-symbol="' + symbol + '" value="' + fmtNum(dividendAmount, 2) + '"></td>' +
       '<td><input type="text" class="dividend-frequency-input" ' +
         'data-symbol="' + symbol + '" value="' + esc(dividendFrequency) + '"></td>' +
-      '<td><button type="button" class="secondary" data-save="' + symbol + '">Save</button></td>' +
+      '<td><button type="button" class="secondary" data-save="' + symbol + '" aria-label="Save" title="Save">' + saveIcon() + '</button></td>' +
       '</tr>';
   }).join('');
   document.getElementById('monthly-dividend').textContent = fmtMoney(monthlyDividendFor(rows));

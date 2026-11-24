@@ -116,6 +116,15 @@ function esc(value) {
     .replace(/"/g, '&quot;');
 }
 
+function saveIcon() {
+  return '<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">' +
+    '<path d="M6 21H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />' +
+    '<polyline points="17 21 17 13 7 13 7 21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />' +
+    '<path d="M7 21V5a2 2 0 0 0-2-2h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />' +
+    '<circle cx="9" cy="21" r="1" fill="currentColor" />' +
+    '</svg>';
+}
+
 const messageBox = document.getElementById('message');
 let owners = [];
 
@@ -157,7 +166,7 @@ function buildRow(holding) {
     html += '<td class="num split-cost" data-owner-id="' + owner.owner_id + '">' +
       (split ? fmtMoney(split.cost_basis) : '\u2014') + '</td>';
   }
-  html += '<td><button type="button" class="secondary" data-save="' + esc(holding.symbol) + '">Save</button></td>';
+  html += '<td><button type="button" class="secondary" data-save="' + esc(holding.symbol) + '" aria-label="Save" title="Save">' + saveIcon() + '</button></td>';
   return html + '</tr>';
 }
 
