@@ -51,7 +51,7 @@
     <header class="page">
       <div>
         <h1>Visualizations</h1>
-        <div class="sub">Charts for shares bought, sold, currently held, and sector mix.</div>
+        <div class="sub">Charts for shares bought, sold, currently held, unrealized P&amp;L, and sector mix.</div>
       </div>
     </header>
 
@@ -79,6 +79,21 @@
           <span class="legend-item"><span class="legend-icon"><svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><polygon points="4,10 6,2 8,10" fill="var(--positive)"/></svg></span>Price up over 1 month</span>
           <span class="legend-item"><span class="legend-icon"><svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><polygon points="4,2 6,10 8,2" fill="var(--negative)"/></svg></span>Price down over 1 month</span>
           <span class="legend-note">Current quantity is the base of each bar; bought and sold are overlaid on it. Green = positive unrealized P&amp;L. Red = negative. Stars mark symbols within 2% of their 6-month low or high; arrows show the 1-month price trend. Hover a bar for details.</span>
+        </div>
+
+        <div class="card">
+          <div class="chart-header">
+            <div class="chart-title">Unrealized P&amp;L</div>
+            <div class="chart-sub">Each bar is the unrealized profit or loss in dollars for the position. Positive positions extend above the $0 line in green; negative positions extend below it in red.</div>
+          </div>
+          <div id="pl-chart" class="chart"></div>
+          <div id="pl-chart-tooltip" class="chart-tooltip" hidden></div>
+          <div class="chart-legend">
+            <span class="legend-item"><span class="legend-swatch" style="background: var(--positive);"></span>Positive unrealized P&amp;L</span>
+            <span class="legend-item"><span class="legend-swatch" style="background: var(--negative);"></span>Negative unrealized P&amp;L</span>
+            <span class="legend-item"><span class="legend-swatch" style="background: var(--border);"></span>$0 line</span>
+            <span class="legend-note">Green bars are above the $0 line, red bars are below it. Hover a bar for details.</span>
+          </div>
         </div>
       </div>
 
@@ -462,6 +477,164 @@ function renderChart(symbols) {
   chartBox.appendChild(svg);
 }
 
+// Unrealized P&L: a diverging bar chart with a $0 baseline. Positive
+// positions extend above the line in green, negative positions below in red.
+const PL_VIEW_W = 800;
+const PL_VIEW_H = 416;
+const PL_MARGIN = { top: 24, right: 19, bottom: 70, left: 51 };
+const PL_PLOT_W = PL_VIEW_W - PL_MARGIN.left - PL_MARGIN.right;
+const PL_PLOT_H = PL_VIEW_H - PL_MARGIN.top - PL_MARGIN.bottom;
+const PL_HALF_PLOT_H = PL_PLOT_H / 2;
+
+const plTooltipBox = document.getElementById('pl-chart-tooltip');
+
+function attachPlTooltip(rect, symbol) {
+  rect.addEventListener('mouseenter', (event) => {
+    const valueClass = symbol.pl >= 0 ? 'positive' : 'negative';
+    plTooltipBox.innerHTML =
+      '<div class="tip-symbol">' + esc(symbol.symbol) + '</div>' +
+      '<div class="tip-row"><span class="tip-label">Unrealized P&amp;L</span><span class="pl-value ' + valueClass + '">' + fmtMoney(symbol.pl) + '</span></div>' +
+      '<div class="tip-row"><span class="tip-label">P&amp;L %</span><span class="pl-value ' + valueClass + '">' + fmtSignedPct(symbol.plPercent) + '</span></div>' +
+      '<div class="tip-row"><span class="tip-label">Cost basis</span><span>' + fmtMoneyOpt(symbol.costBasis) + '</span></div>' +
+      '<div class="tip-row"><span class="tip-label">Current value</span><span>' + fmtMoneyOpt(symbol.currentValue) + '</span></div>';
+    plTooltipBox.hidden = false;
+    moveTooltip(event, plTooltipBox);
+  });
+  rect.addEventListener('mousemove', (event) => moveTooltip(event, plTooltipBox));
+  rect.addEventListener('mouseleave', () => { plTooltipBox.hidden = true; });
+}
+
+function renderPlChart(symbols) {
+  const chartBox = document.getElementById('pl-chart');
+  chartBox.innerHTML = '';
+
+  const maxAbs = Math.max(
+    ...symbols.map((symbol) => Math.abs(Number(symbol.pl) || 0)),
+    0
+  ) * 1.1;
+  if (maxAbs <= 0) {
+    chartBox.innerHTML = '<p class="empty">No unrealized P&amp;L to visualize.</p>';
+    return;
+  }
+
+  // The scale is symmetric around $0, so the baseline sits mid-chart and
+  // positive and negative positions get the same visual weight.
+  const step = niceStep(maxAbs / MAX_TICKS);
+  const top = Math.ceil(maxAbs / step) * step;
+  const zeroY = PL_MARGIN.top + PL_PLOT_H / 2;
+
+  const svg = svgEl('svg', {
+    viewBox: '0 0 ' + PL_VIEW_W + ' ' + PL_VIEW_H,
+    width: PL_VIEW_W,
+    height: PL_VIEW_H,
+    role: 'img',
+    'aria-label': 'Diverging bar chart of unrealized profit and loss in dollars by position',
+  });
+
+  svg.appendChild(svgEl('rect', {
+    x: PL_MARGIN.left,
+    y: PL_MARGIN.top,
+    width: PL_PLOT_W,
+    height: PL_PLOT_H,
+    rx: 8,
+    fill: 'var(--surface)',
+  }));
+
+  // Horizontal gridlines and y-axis labels, symmetric around $0.
+  const tickCount = Math.round(top / step);
+  for (let i = -tickCount; i <= tickCount; i++) {
+    const value = i * step;
+    const y = zeroY - (value / top) * PL_HALF_PLOT_H;
+    svg.appendChild(svgEl('line', {
+      x1: PL_MARGIN.left,
+      y1: y,
+      x2: PL_VIEW_W - PL_MARGIN.right,
+      y2: y,
+      'class': 'grid-line',
+    }));
+    svg.appendChild(svgEl('text', {
+      x: PL_MARGIN.left - 8,
+      y: y + 3,
+      'class': 'axis-label',
+      'text-anchor': 'end',
+    }, fmtMoney(value)));
+  }
+
+  // The $0 baseline, drawn on top of the gridlines.
+  svg.appendChild(svgEl('line', {
+    x1: PL_MARGIN.left,
+    y1: zeroY,
+    x2: PL_VIEW_W - PL_MARGIN.right,
+    y2: zeroY,
+    'class': 'zero-line',
+  }));
+
+  // Left axis.
+  svg.appendChild(svgEl('line', {
+    x1: PL_MARGIN.left,
+    y1: PL_MARGIN.top,
+    x2: PL_MARGIN.left,
+    y2: PL_MARGIN.top + PL_PLOT_H,
+    stroke: 'var(--border)',
+    'stroke-width': 1,
+  }));
+
+  const groupW = PL_PLOT_W / symbols.length;
+  const barW = Math.max(24, groupW * 0.55);
+  const barGroups = [];
+
+  symbols.forEach((symbol, index) => {
+    const centerX = PL_MARGIN.left + groupW * index + groupW / 2;
+    const x = centerX - barW / 2;
+    const value = Number(symbol.pl) || 0;
+    const positive = value >= 0;
+    const height = Math.abs(value) / top * PL_HALF_PLOT_H;
+    const y = positive ? zeroY - height : zeroY;
+    const color = positive ? 'var(--positive)' : 'var(--negative)';
+
+    const bar = svgEl('rect', {
+      x: x,
+      y: y,
+      width: barW,
+      height: height,
+      rx: 3,
+      fill: color,
+      opacity: 0,
+      'class': 'pl-bar',
+      'data-symbol': symbol.symbol,
+    });
+    attachPlTooltip(bar, symbol);
+    svg.appendChild(bar);
+    barGroups.push({ bar: bar, delay: index });
+
+    // Value label at the end of the bar.
+    svg.appendChild(svgEl('text', {
+      x: centerX,
+      y: positive ? y - 8 : y + height + 12,
+      'class': 'pl-value ' + (positive ? 'positive' : 'negative'),
+      'text-anchor': 'middle',
+    }, fmtMoney(value)));
+
+    // Symbol label below the bar.
+    svg.appendChild(svgEl('text', {
+      x: centerX,
+      y: PL_MARGIN.top + PL_PLOT_H + 21,
+      'class': 'axis-label',
+      'text-anchor': 'middle',
+      'font-weight': '600',
+    }, symbol.symbol));
+  });
+
+  // Reveal the bars in a staggered animation.
+  requestAnimationFrame(() => {
+    barGroups.forEach(({ bar, delay }) => {
+      setTimeout(() => { bar.style.opacity = '1'; }, delay * 8);
+    });
+  });
+
+  chartBox.appendChild(svg);
+}
+
 // Sector mix: the inner ring shows each sector's share of held quantity,
 // the outer ring shows each sector's share of current value.
 const SECTOR_VIEW_W = 800;
@@ -687,6 +860,8 @@ async function load() {
           trend: 'flat',
           pl: 0,
           plPercent: 0,
+          costBasis: 0,
+          currentValue: 0,
         });
       }
       return totals.get(symbol);
@@ -711,6 +886,8 @@ async function load() {
       entry.currentPrice = Number(holding.current_price) || null;
       entry.pl = Number(holding.unrealized_pl) || 0;
       entry.plPercent = Number(holding.unrealized_pl_percent) || 0;
+      entry.costBasis = Number(holding.cost_basis) || 0;
+      entry.currentValue = Number(holding.current_value) || 0;
 
       const stats = statsBySymbol.get(holding.symbol);
       if (stats) {
@@ -732,6 +909,7 @@ async function load() {
     }
 
     renderChart(symbols);
+    renderPlChart(symbols);
     renderSectorChart(holdings);
     showMessage('', '');
   } catch (error) {

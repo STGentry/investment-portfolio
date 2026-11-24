@@ -422,6 +422,28 @@ input.invalid, select.invalid { border-color: var(--negative); }
 .chart-tooltip .tip-label.pl { color: var(--positive); font-weight: 600; }
 .chart-tooltip .tip-label.pl.negative { color: var(--negative); }
 
+/* Unrealized P&L chart (visualizations page) */
+#pl-chart { width: 100%; overflow-x: auto; }
+#pl-chart svg { display: block; width: 100%; height: auto; }
+
+.chart .pl-bar { transition: opacity 0.2s ease; }
+.chart .pl-bar:hover { opacity: 0.75; }
+
+.chart .pl-value {
+  font-size: 10px;
+  font-weight: 600;
+  fill: var(--muted);
+  font-family: inherit;
+}
+.chart .pl-value.positive { fill: var(--positive); }
+.chart .pl-value.negative { fill: var(--negative); }
+
+.chart .zero-line { stroke: var(--border); stroke-width: 2; }
+
+.chart-tooltip .pl-value { font-weight: 600; }
+.chart-tooltip .pl-value.positive { color: var(--positive); }
+.chart-tooltip .pl-value.negative { color: var(--negative); }
+
 .chart-legend {
   display: flex;
   flex-wrap: wrap;
