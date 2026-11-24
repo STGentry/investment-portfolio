@@ -271,6 +271,7 @@ td.negative { color: var(--negative); font-weight: 600; }
 .form-row .field { flex: 1 1 140px; min-width: 120px; }
 .form-row .field label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; }
 .form-actions { margin-top: 18px; }
+.form-row .form-actions { flex-basis: 100%; }
 
 /* Editable trade history grid */
 td.actions { width: 1%; white-space: nowrap; }
