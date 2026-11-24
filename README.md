@@ -10,6 +10,12 @@ machine (the "app server") and stores data in SQLite.
 - Full audit trail of all buy/sell/dividend trades
 - Dashboard, trade entry form, ownership split editor, and visualizations (static HTML/CSS, no build step)
 
+## Agent Coding Instructions
+
+- Never use images for testing and validation
+- Always use C:\tmp for testing and validation scripts
+- Ask questions if requests are vague
+
 ## Requirements
 
 - Python 3.11+
@@ -26,7 +32,7 @@ pip install -r requirements.txt
 > If `python` on your PATH points at a different interpreter, use the Python 3.11
 > launcher explicitly: `py -3.11 -m pip install -r requirements.txt`.
 
-## Initialize the database (first run only)
+## Initialize the database (first run only, no longer needed if database already exists)
 
 ```bash
 python -m data.migrate
