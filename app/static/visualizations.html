@@ -65,7 +65,7 @@
             <div class="chart-title">Position Quantity Evolution</div>
             <div class="chart-sub">Each bar's height is the current quantity, with shares bought and sold overlaid on top. Sold is shown reductively on the bought shares.</div>
           </div>
-          <div id="chart"></div>
+          <div id="chart" class="chart"></div>
           <div id="chart-tooltip" class="chart-tooltip" hidden></div>
         </div>
 
@@ -407,6 +407,7 @@ function renderChart(symbols) {
       const marker = svgEl('polygon', {
         points: starPoints(centerX, barTop - STAR_OFFSET, STAR_OUTER_RADIUS, STAR_INNER_RADIUS),
         'class': 'star ' + star,
+        fill: star === 'low' ? 'var(--negative)' : 'var(--positive)',
         opacity: 0,
         'data-symbol': symbol.symbol,
       });
@@ -418,6 +419,7 @@ function renderChart(symbols) {
       const marker = svgEl('polygon', {
         points: arrowPoints(centerX, barTop - ARROW_OFFSET, trend === 'up' ? 1 : -1),
         'class': 'arrow ' + trend,
+        fill: trend === 'up' ? 'var(--positive)' : 'var(--negative)',
         opacity: 0,
         'data-symbol': symbol.symbol,
       });

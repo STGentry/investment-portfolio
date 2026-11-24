@@ -385,6 +385,12 @@ input.invalid, select.invalid { border-color: var(--negative); }
 .chart .arrow.up { fill: var(--positive); }
 .chart .arrow.down { fill: var(--negative); }
 
+/* The chart container is also addressed by id, so mirror the marker colors. */
+#chart .star.low { fill: var(--negative); }
+#chart .star.high { fill: var(--positive); }
+#chart .arrow.up { fill: var(--positive); }
+#chart .arrow.down { fill: var(--negative); }
+
 .chart-tooltip .tip-label.price { font-weight: 600; }
 .chart-tooltip .tip-label.trend.positive { color: var(--positive); font-weight: 600; }
 .chart-tooltip .tip-label.trend.negative { color: var(--negative); font-weight: 600; }
