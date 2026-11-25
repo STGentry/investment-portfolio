@@ -17,7 +17,7 @@ The visualizations page (`/visualizations.html`) renders static SVG charts with 
 - Position quantity evolution: shares bought and sold against current quantity
 - Unrealized P&L: positive and negative positions around a $0 line
 - Price movement: trailing three-month closing price sparklines per position
-- Sector mix: inner ring shows quantity share, outer ring shows value share, with straight leader lines that meet the labels at hard angles
+- Sector mix: inner ring shows quantity share, outer ring shows value share, with a color-coded legend of sectors to the left
 
 ## Agent Coding Instructions
 

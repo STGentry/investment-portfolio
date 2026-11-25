@@ -486,6 +486,34 @@ input.invalid, select.invalid { border-color: var(--negative); }
 /* Sector wheel (visualizations page) */
 .sector-chart { width: 100%; }
 
+/* The color-coded legend of sectors sits in a column to the left of the wheel. */
+.sector-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.sector-legend {
+  flex: 0 0 180px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.sector-legend .sector-legend-item { display: flex; align-items: center; gap: 8px; }
+.sector-legend .sector-legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  flex: none;
+}
+.sector-legend .sector-legend-name { color: var(--text); font-weight: 600; }
+
+.sector-layout .sector-chart { flex: 1 1 auto; min-width: 0; width: auto; }
+
 .sector-chart svg {
   display: block;
   width: 100%;
@@ -511,21 +539,6 @@ input.invalid, select.invalid { border-color: var(--negative); }
   stroke-width: 2;
 }
 
-/* Sector labels connected to the outer ring by leader lines. */
-.sector-chart .sector-leader {
-  transition: stroke-width 0.15s ease;
-}
-
-.sector-chart .sector-label:hover .sector-leader {
-  stroke-width: 2;
-}
-
-.sector-chart .sector-label-name {
-  font-weight: 600;
-  fill: var(--text);
-  font-family: inherit;
-}
-
 /* White percentages drawn on the slices. */
 .sector-chart .sector-percent {
   fill: #ffffff;
@@ -533,6 +546,13 @@ input.invalid, select.invalid { border-color: var(--negative); }
   font-family: inherit;
   pointer-events: none;
   user-select: none;
+}
+
+/* Narrow screens: stack the legend above the wheel. */
+@media (max-width: 640px) {
+  .sector-layout { flex-direction: column; }
+  .sector-legend { flex: 0 0 auto; width: 100%; max-width: 420px; }
+  .sector-layout .sector-chart { width: 100%; }
 }
 
 /* Sparkline KPI cards (visualizations page) */

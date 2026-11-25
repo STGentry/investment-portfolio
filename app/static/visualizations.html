@@ -109,7 +109,10 @@
             <div class="chart-title">Sector Mix</div>
             <div class="chart-sub">Inner ring: share of held quantity by sector. Outer ring: share of current value by sector.</div>
           </div>
-          <div id="sector-chart"></div>
+          <div class="sector-layout">
+            <div id="sector-legend" class="sector-legend"></div>
+            <div id="sector-chart" class="sector-chart"></div>
+          </div>
           <div id="sector-tooltip" class="chart-tooltip" hidden></div>
         </div>
       </div>
@@ -643,8 +646,8 @@ function renderPlChart(symbols) {
 }
 
 // Sector mix: the inner ring shows each sector's share of held quantity,
-// the outer ring shows each sector's share of current value. Every outer ring
-// slice is connected to a label on the left or right side of the chart.
+// the outer ring shows each sector's share of current value. Sectors are
+// identified by the color-coded legend to the left of the wheel.
 const SECTOR_VIEW_W = 800;
 const SECTOR_VIEW_H = 416;
 const SECTOR_CENTER_X = 400;
@@ -657,22 +660,11 @@ const SECTOR_PALETTE = [
   '#e24a33', '#3483a2',
 ];
 
-// Callout labels sit in the gutters on either side of the wheel. Each column is
-// split into evenly sized slots so the labels never crowd each other.
-const SECTOR_LABEL_LEFT_X = 16;
-const SECTOR_LABEL_RIGHT_X = 600;
-const SECTOR_LABEL_GAP = 8;
-const SECTOR_LABEL_TOP = SECTOR_CENTER_Y - SECTOR_OUTER_RADIUS + 10;
-const SECTOR_LABEL_BOTTOM = SECTOR_CENTER_Y + SECTOR_OUTER_RADIUS - 10;
-
 // Percentage labels are drawn on the slices themselves, in white.
 const SECTOR_PCT_INNER_RADIUS = 62;
 const SECTOR_PCT_OUTER_RADIUS = 132;
 const SECTOR_PCT_BASE_SIZE = 11;
 const SECTOR_PCT_MIN_SIZE = 7;
-
-// How far the leader lines bow away from the wheel.
-const SECTOR_LEADER_BEND = 34;
 
 function sectorPoint(radius, angle) {
   const radians = (angle * Math.PI) / 180;
@@ -715,8 +707,8 @@ function wheelSlicePath(innerRadius, outerRadius, startAngle, endAngle) {
     ' ' + innerArc + ' Z';
 }
 
-// Rough advance width of a string in em units. Used to fit labels to their
-// slice without measuring the rendered text.
+// Rough advance width of a string in em units. Used to fit percentage labels
+// to their slice without measuring the rendered text.
 function textWidthInEm(text) {
   let width = 0;
   for (const char of text) {
@@ -731,20 +723,6 @@ function textWidthInEm(text) {
     }
   }
   return width;
-}
-
-// Two straight segments from the ring into the gutter that bow away from the
-// wheel, so the line never cuts across the pie. The segments meet at a hard
-// angle at the bend point.
-function sectorLeaderPath(ringX, ringY, endX, endY) {
-  const dx = ringX - SECTOR_CENTER_X;
-  const dy = ringY - SECTOR_CENTER_Y;
-  const distance = Math.hypot(dx, dy) || 1;
-  const bendX = ringX + (dx / distance) * SECTOR_LEADER_BEND;
-  const bendY = ringY + (dy / distance) * SECTOR_LEADER_BEND;
-  return 'M ' + ringX.toFixed(2) + ' ' + ringY.toFixed(2) +
-    ' L ' + bendX.toFixed(2) + ' ' + bendY.toFixed(2) +
-    ' L ' + endX.toFixed(2) + ' ' + endY.toFixed(2);
 }
 
 // Draw a white percentage at the middle of a slice. The font shrinks to fit the
@@ -793,72 +771,11 @@ function attachSectorTooltip(path, sector) {
   path.addEventListener('mouseleave', () => { sectorTooltipBox.hidden = true; });
 }
 
-// Put each sector's callout label in the left or right gutter, then spread the
-// labels in each column into evenly sized slots so they never overlap.
-function placeSectorLabels(sectors) {
-  const columns = { left: [], right: [] };
-  sectors.forEach((sector) => {
-    const midpoint = (sector.valueStart + sector.valueEnd) / 2;
-    const point = sectorPoint(SECTOR_OUTER_RADIUS, midpoint);
-    sector.ringX = point.x;
-    sector.ringY = point.y;
-    if (point.x > SECTOR_CENTER_X) {
-      sector.side = 'right';
-    } else if (point.x < SECTOR_CENTER_X) {
-      sector.side = 'left';
-    } else {
-      sector.side = point.y < SECTOR_CENTER_Y ? 'right' : 'left';
-    }
-    columns[sector.side].push(sector);
-  });
-
-  const slotHeights = Object.values(columns).map((column) => {
-    const slotHeight = (SECTOR_LABEL_BOTTOM - SECTOR_LABEL_TOP) / column.length;
-    column.sort((a, b) => a.ringY - b.ringY);
-    column.forEach((sector, index) => {
-      sector.labelY = SECTOR_LABEL_TOP + slotHeight * (index + 0.5);
-    });
-    return slotHeight;
-  });
-  const fontSize = Math.max(8, Math.min(11, Math.min(...slotHeights) - 10));
-  sectors.forEach((sector) => {
-    sector.labelFontSize = fontSize;
-  });
-}
-
-// Draw the leader line and the callout label that names the sector.
-function drawSectorLabel(svg, sector) {
-  const isLeft = sector.side === 'left';
-  const anchorX = isLeft ? SECTOR_LABEL_LEFT_X : SECTOR_LABEL_RIGHT_X;
-  const name = esc(sector.sector);
-  const nameWidth = textWidthInEm(name) * sector.labelFontSize;
-  const endX = isLeft
-    ? Math.min(sector.ringX - 4, SECTOR_LABEL_LEFT_X + nameWidth + SECTOR_LABEL_GAP)
-    : SECTOR_LABEL_RIGHT_X - SECTOR_LABEL_GAP;
-
-  const group = svgEl('g', { 'class': 'sector-label' });
-  group.appendChild(svgEl('path', {
-    d: sectorLeaderPath(sector.ringX, sector.ringY, endX, sector.labelY),
-    'class': 'sector-leader',
-    stroke: sector.color,
-    'stroke-width': 1.5,
-    'stroke-linejoin': 'miter',
-    fill: 'none',
-  }));
-  group.appendChild(svgEl('text', {
-    x: anchorX,
-    y: sector.labelY.toFixed(2),
-    'class': 'sector-label-name',
-    'font-size': sector.labelFontSize,
-    'dominant-baseline': 'central',
-  }, name));
-  attachSectorTooltip(group, sector);
-  svg.appendChild(group);
-}
-
 function renderSectorChart(holdings) {
   const chartBox = document.getElementById('sector-chart');
+  const legendBox = document.getElementById('sector-legend');
   chartBox.innerHTML = '';
+  legendBox.innerHTML = '';
 
   const totals = new Map();
   for (const holding of holdings) {
@@ -938,8 +855,6 @@ function renderSectorChart(holdings) {
     sector.valueEnd = valueCursor;
   });
 
-  placeSectorLabels(sectors);
-
   sectors.forEach((sector, index) => {
     const color = SECTOR_PALETTE[index % SECTOR_PALETTE.length];
     sector.color = color;
@@ -976,10 +891,12 @@ function renderSectorChart(holdings) {
     drawSectorPercent(svg, SECTOR_PCT_OUTER_RADIUS, sector.valueStart, sector.valueEnd, sector.valueShare, false);
   });
 
-  // Callout labels connected to their outer ring slices.
-  sectors.forEach((sector) => {
-    drawSectorLabel(svg, sector);
-  });
+  // Color-coded legend: one row per sector, listed to the left of the wheel.
+  legendBox.innerHTML = sectors.map((sector) => {
+    return '<div class="sector-legend-item">' +
+      '<span class="sector-legend-swatch" style="background: ' + sector.color + ';"></span>' +
+      '<span class="sector-legend-name">' + esc(sector.sector) + '</span></div>';
+  }).join('');
 
   chartBox.appendChild(svg);
 }
