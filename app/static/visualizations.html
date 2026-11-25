@@ -657,13 +657,22 @@ const SECTOR_PALETTE = [
   '#e24a33', '#3483a2',
 ];
 
-// Labels sit in the gutters on either side of the wheel, at the height of the
-// outer ring slice they describe.
+// Callout labels sit in the gutters on either side of the wheel. Each column is
+// split into evenly sized slots so the labels never crowd each other.
 const SECTOR_LABEL_LEFT_X = 16;
 const SECTOR_LABEL_RIGHT_X = 600;
-const SECTOR_LEADER_LEFT_X = SECTOR_CENTER_X - SECTOR_OUTER_RADIUS - 8;
-const SECTOR_LEADER_RIGHT_X = SECTOR_CENTER_X + SECTOR_OUTER_RADIUS + 12;
-const SECTOR_LABEL_MIN_GAP = 30;
+const SECTOR_LABEL_GAP = 8;
+const SECTOR_LABEL_TOP = SECTOR_CENTER_Y - SECTOR_OUTER_RADIUS + 10;
+const SECTOR_LABEL_BOTTOM = SECTOR_CENTER_Y + SECTOR_OUTER_RADIUS - 10;
+
+// Percentage labels are drawn on the slices themselves, in white.
+const SECTOR_PCT_INNER_RADIUS = 62;
+const SECTOR_PCT_OUTER_RADIUS = 132;
+const SECTOR_PCT_BASE_SIZE = 11;
+const SECTOR_PCT_MIN_SIZE = 7;
+
+// How far the leader lines bow away from the wheel.
+const SECTOR_LEADER_BEND = 34;
 
 function sectorPoint(radius, angle) {
   const radians = (angle * Math.PI) / 180;
@@ -705,6 +714,67 @@ function wheelSlicePath(innerRadius, outerRadius, startAngle, endAngle) {
     ' L ' + innerEnd.x.toFixed(2) + ' ' + innerEnd.y.toFixed(2) +
     ' ' + innerArc + ' Z';
 }
+
+// Rough advance width of a string in em units. Used to fit labels to their
+// slice without measuring the rendered text.
+function textWidthInEm(text) {
+  let width = 0;
+  for (const char of text) {
+    if (char >= '0' && char <= '9') {
+      width += 0.58;
+    } else if (char === '.') {
+      width += 0.3;
+    } else if (char === '%') {
+      width += 1;
+    } else {
+      width += 0.62;
+    }
+  }
+  return width;
+}
+
+// A quadratic bezier from the ring into the gutter that bows away from the
+// wheel, so the line never cuts across the pie.
+function sectorLeaderPath(ringX, ringY, endX, endY) {
+  const dx = ringX - SECTOR_CENTER_X;
+  const dy = ringY - SECTOR_CENTER_Y;
+  const distance = Math.hypot(dx, dy) || 1;
+  const controlX = ringX + (dx / distance) * SECTOR_LEADER_BEND;
+  const controlY = ringY + (dy / distance) * SECTOR_LEADER_BEND;
+  return 'M ' + ringX.toFixed(2) + ' ' + ringY.toFixed(2) +
+    ' Q ' + controlX.toFixed(2) + ' ' + controlY.toFixed(2) +
+    ' ' + endX.toFixed(2) + ' ' + endY.toFixed(2);
+}
+
+// Draw a white percentage at the middle of a slice. The font shrinks to fit the
+// slice's arc so neighbouring labels never overlap; slices too narrow for the
+// smallest size are left without a percentage.
+function drawSectorPercent(svg, radius, startAngle, endAngle, share, inner) {
+  const span = Math.abs(endAngle - startAngle);
+  const midpoint = (startAngle + endAngle) / 2;
+  const point = sectorPoint(radius, midpoint);
+  const text = fmtPct(share * 100);
+  const arcLength = radius * (span * Math.PI) / 180;
+  const baseSize = inner ? SECTOR_PCT_BASE_SIZE - 1 : SECTOR_PCT_BASE_SIZE;
+  const naturalWidth = textWidthInEm(text) * baseSize;
+  const maxSize = arcLength * 0.9;
+  const size = naturalWidth > maxSize ? baseSize * (maxSize / naturalWidth) : baseSize;
+  if (size < SECTOR_PCT_MIN_SIZE) {
+    return;
+  }
+  svg.appendChild(svgEl('text', {
+    x: point.x.toFixed(2),
+    y: point.y.toFixed(2),
+    'text-anchor': 'middle',
+    'dominant-baseline': 'central',
+    transform: 'rotate(' + midpoint.toFixed(2) + ') ' + point.x.toFixed(2) + ',' + point.y.toFixed(2),
+    fill: '#ffffff',
+    'font-size': size.toFixed(1),
+    'font-weight': '600',
+    'class': 'sector-percent' + (inner ? ' sector-percent-inner' : ''),
+  }, text));
+}
+
 const sectorTooltipBox = document.getElementById('sector-tooltip');
 
 function attachSectorTooltip(path, sector) {
@@ -722,8 +792,8 @@ function attachSectorTooltip(path, sector) {
   path.addEventListener('mouseleave', () => { sectorTooltipBox.hidden = true; });
 }
 
-// Put each sector's label in the left or right gutter at the height of its
-// outer ring slice, then nudge labels apart so they never overlap.
+// Put each sector's callout label in the left or right gutter, then spread the
+// labels in each column into evenly sized slots so they never overlap.
 function placeSectorLabels(sectors) {
   const columns = { left: [], right: [] };
   sectors.forEach((sector) => {
@@ -738,45 +808,48 @@ function placeSectorLabels(sectors) {
     } else {
       sector.side = point.y < SECTOR_CENTER_Y ? 'right' : 'left';
     }
-    sector.labelY = point.y;
     columns[sector.side].push(sector);
   });
-  Object.values(columns).forEach((column) => {
-    column.sort((a, b) => a.labelY - b.labelY);
-    for (let i = 1; i < column.length; i++) {
-      if (column[i].labelY - column[i - 1].labelY < SECTOR_LABEL_MIN_GAP) {
-        column[i].labelY = column[i - 1].labelY + SECTOR_LABEL_MIN_GAP;
-      }
-    }
+
+  const slotHeights = Object.values(columns).map((column) => {
+    const slotHeight = (SECTOR_LABEL_BOTTOM - SECTOR_LABEL_TOP) / column.length;
+    column.sort((a, b) => a.ringY - b.ringY);
+    column.forEach((sector, index) => {
+      sector.labelY = SECTOR_LABEL_TOP + slotHeight * (index + 0.5);
+    });
+    return slotHeight;
+  });
+  const fontSize = Math.max(8, Math.min(11, Math.min(...slotHeights) - 10));
+  sectors.forEach((sector) => {
+    sector.labelFontSize = fontSize;
   });
 }
 
-// Draw the leader line and the label that carries the sector's information.
+// Draw the curved leader line and the callout label that names the sector.
 function drawSectorLabel(svg, sector) {
-  const anchorX = sector.side === 'left' ? SECTOR_LABEL_LEFT_X : SECTOR_LABEL_RIGHT_X;
-  const leaderX = sector.side === 'left' ? SECTOR_LEADER_LEFT_X : SECTOR_LEADER_RIGHT_X;
-  const labelY = sector.labelY;
+  const isLeft = sector.side === 'left';
+  const anchorX = isLeft ? SECTOR_LABEL_LEFT_X : SECTOR_LABEL_RIGHT_X;
+  const name = esc(sector.sector);
+  const nameWidth = textWidthInEm(name) * sector.labelFontSize;
+  const endX = isLeft
+    ? Math.min(sector.ringX - 4, SECTOR_LABEL_LEFT_X + nameWidth + SECTOR_LABEL_GAP)
+    : SECTOR_LABEL_RIGHT_X - SECTOR_LABEL_GAP;
 
   const group = svgEl('g', { 'class': 'sector-label' });
-  group.appendChild(svgEl('line', {
-    x1: sector.ringX.toFixed(2),
-    y1: sector.ringY.toFixed(2),
-    x2: leaderX,
-    y2: labelY.toFixed(2),
+  group.appendChild(svgEl('path', {
+    d: sectorLeaderPath(sector.ringX, sector.ringY, endX, sector.labelY),
     'class': 'sector-leader',
     stroke: sector.color,
     'stroke-width': 1.5,
+    fill: 'none',
   }));
   group.appendChild(svgEl('text', {
     x: anchorX,
-    y: (labelY - 7).toFixed(2),
+    y: sector.labelY.toFixed(2),
     'class': 'sector-label-name',
-  }, esc(sector.sector)));
-  group.appendChild(svgEl('text', {
-    x: anchorX,
-    y: (labelY + 7).toFixed(2),
-    'class': 'sector-label-metric',
-  }, 'Qty ' + fmtQty(sector.quantity) + ' · Value ' + fmtMoney(sector.value)));
+    'font-size': sector.labelFontSize,
+    'dominant-baseline': 'central',
+  }, name));
   attachSectorTooltip(group, sector);
   svg.appendChild(group);
 }
@@ -894,7 +967,14 @@ function renderSectorChart(holdings) {
     svg.appendChild(wheel);
   });
 
-  // Labels connected to their outer ring slices.
+  // White percentage labels on each slice: quantity share on the inner ring,
+  // value share on the outer ring.
+  sectors.forEach((sector) => {
+    drawSectorPercent(svg, SECTOR_PCT_INNER_RADIUS, sector.quantityStart, sector.quantityEnd, sector.quantityShare, true);
+    drawSectorPercent(svg, SECTOR_PCT_OUTER_RADIUS, sector.valueStart, sector.valueEnd, sector.valueShare, false);
+  });
+
+  // Callout labels connected to their outer ring slices.
   sectors.forEach((sector) => {
     drawSectorLabel(svg, sector);
   });

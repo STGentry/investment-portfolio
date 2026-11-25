@@ -521,17 +521,18 @@ input.invalid, select.invalid { border-color: var(--negative); }
 }
 
 .sector-chart .sector-label-name {
-  font-size: 11px;
   font-weight: 600;
   fill: var(--text);
   font-family: inherit;
 }
 
-.sector-chart .sector-label-metric {
-  font-size: 10px;
-  fill: var(--muted);
+/* White percentages drawn on the slices. */
+.sector-chart .sector-percent {
+  fill: #ffffff;
+  font-weight: 600;
   font-family: inherit;
-  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  user-select: none;
 }
 
 /* Sparkline KPI cards (visualizations page) */
