@@ -15,6 +15,7 @@ machine (the "app server") and stores data in SQLite.
 - Never use images for testing and validation
 - Always use C:\tmp for testing and validation scripts
 - Ask questions if requests are vague
+- Update README.md with relevant changes
 
 ## Requirements
 
@@ -103,8 +104,6 @@ investment-portfolio/
 ├── database.py                # DB connection + schema init
 ├── models.py                  # Pydantic request/response schemas
 ├── recompute_cost_basis.py    # Recalculate cost basis from the trades table
-├── tests/
-│   └── verify_app.py          # End-to-end API verification script
 ├── app/
 │   ├── __init__.py
 │   ├── main.py                # FastAPI app bootstrap
