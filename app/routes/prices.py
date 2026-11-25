@@ -5,7 +5,7 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException
 
 from database import db
-from ..services.analytics import price_stats
+from ..services.analytics import price_history, price_stats
 
 try:
     import yfinance as yf
@@ -204,3 +204,14 @@ def get_price_stats() -> list[dict]:
     with db() as conn:
         symbols = conn.execute("SELECT symbol FROM holdings ORDER BY symbol").fetchall()
         return [price_stats(conn, row["symbol"]) for row in symbols]
+
+
+@router.get("/prices/history")
+def get_price_history() -> list[dict]:
+    """Trailing three months of daily closes for every holding."""
+    with db() as conn:
+        symbols = conn.execute("SELECT symbol FROM holdings ORDER BY symbol").fetchall()
+        return [
+            {"symbol": row["symbol"], "history": price_history(conn, row["symbol"])}
+            for row in symbols
+        ]

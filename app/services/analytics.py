@@ -8,6 +8,7 @@ from database import db
 # Trailing windows used for the price context markers on the charts.
 SIX_MONTH_WINDOW_DAYS = 183
 ONE_MONTH_WINDOW_DAYS = 31
+THREE_MONTH_WINDOW_DAYS = 91
 
 # Minimum closes needed before the 6-month range / 1-month trend is reported.
 MIN_SIX_MONTH_POINTS = 10
@@ -89,13 +90,8 @@ def latest_price(conn, symbol: str, fallback: float | None = None) -> float | No
     return float(row["close_price"])
 
 
-def price_stats(conn, symbol: str) -> dict:
-    """Price context for a symbol: 6-month range and 1-month trend.
-
-    The 6-month low/high are the minimum and maximum closes in the trailing
-    six-month window, and the trend compares the latest close with the
-    earliest close in the trailing one-month window.
-    """
+def _price_closes(conn, symbol: str) -> list[tuple[date, float]]:
+    """All dated closes for a symbol, oldest first."""
     rows = conn.execute(
         "SELECT price_date, close_price FROM prices WHERE symbol = ? ORDER BY price_date",
         (symbol,),
@@ -108,6 +104,40 @@ def price_stats(conn, symbol: str) -> dict:
         except (TypeError, ValueError):
             continue
         closes.append((close_date, float(row["close_price"])))
+    return closes
+
+
+def _history_points(closes, window_days: int = THREE_MONTH_WINDOW_DAYS) -> list[dict]:
+    """Trailing closes as API-ready points, oldest first.
+
+    The window is measured back from the symbol's most recent close so that
+    symbols with slightly different histories still cover the same span.
+    """
+    if not closes:
+        return []
+
+    latest_date = closes[-1][0]
+    return [
+        {"date": close_date.isoformat(), "close": round(price, 2)}
+        for close_date, price in closes
+        if (latest_date - close_date).days <= window_days
+    ]
+
+
+def price_history(conn, symbol: str, window_days: int = THREE_MONTH_WINDOW_DAYS) -> list[dict]:
+    """Trailing closes for a symbol, used by the sparkline charts."""
+    return _history_points(_price_closes(conn, symbol), window_days)
+
+
+def price_stats(conn, symbol: str) -> dict:
+    """Price context for a symbol: 6-month range, 1-month trend, 3-month history.
+
+    The 6-month low/high are the minimum and maximum closes in the trailing
+    six-month window, the trend compares the latest close with the earliest
+    close in the trailing one-month window, and ``history`` carries the
+    trailing three months of closes for the sparkline charts.
+    """
+    closes = _price_closes(conn, symbol)
 
     if not closes:
         return {
@@ -118,6 +148,7 @@ def price_stats(conn, symbol: str) -> dict:
             "month_change_percent": None,
             "trend": "flat",
             "data_points": 0,
+            "history": [],
         }
 
     latest_date, latest_price = closes[-1]
@@ -154,6 +185,7 @@ def price_stats(conn, symbol: str) -> dict:
         "month_change_percent": round(change, 2) if enough_trend else None,
         "trend": trend if enough_trend else "flat",
         "data_points": len(six_month),
+        "history": _history_points(closes),
     }
 
 

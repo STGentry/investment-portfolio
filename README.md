@@ -89,6 +89,7 @@ Base URL: `http://localhost:8000/api/v1`
 | GET | `/analytics/summary?owner_id=1` | Summary for one owner |
 | GET | `/analytics/summary?sector=&industry=` | Summary filtered by sector and/or industry (repeatable params match any selection) |
 | GET | `/prices/stats` | Six-month low/high and one-month price trend for every holding |
+| GET | `/prices/history` | Trailing three months of daily closes for every holding |
 | POST | `/prices/update` | Backfill 6 months of daily closes, refresh the latest close prices, and update dividend amount/frequency for all holdings via Yahoo Finance (yfinance) |
 
 

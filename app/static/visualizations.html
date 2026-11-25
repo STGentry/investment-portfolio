@@ -51,7 +51,7 @@
     <header class="page">
       <div>
         <h1>Visualizations</h1>
-        <div class="sub">Charts for shares bought, sold, currently held, unrealized P&amp;L, and sector mix.</div>
+        <div class="sub">Charts for shares bought, sold, currently held, unrealized P&amp;L, price movement, and sector mix.</div>
       </div>
     </header>
 
@@ -97,14 +97,22 @@
         </div>
       </div>
 
-      <div class="card">
-        <div class="chart-header">
-          <div class="chart-title">Sector Mix</div>
-          <div class="chart-sub">Inner ring: share of held quantity by sector. Outer ring: share of current value by sector.</div>
+      <div class="viz-column">
+        <div class="sparkline-header">
+          <div class="chart-title">Price Movement</div>
+          <div class="chart-sub">Closing prices over the trailing three months, one sparkline per position.</div>
         </div>
-        <div id="sector-chart"></div>
-        <div id="sector-tooltip" class="chart-tooltip" hidden></div>
-        <div id="sector-legend" class="sector-legend"></div>
+        <div class="sparkline-grid" id="sparkline-grid"></div>
+
+        <div class="card">
+          <div class="chart-header">
+            <div class="chart-title">Sector Mix</div>
+            <div class="chart-sub">Inner ring: share of held quantity by sector. Outer ring: share of current value by sector.</div>
+          </div>
+          <div id="sector-chart"></div>
+          <div id="sector-tooltip" class="chart-tooltip" hidden></div>
+          <div id="sector-legend" class="sector-legend"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -828,6 +836,129 @@ function renderSectorChart(holdings) {
       '</span></div>';
   }).join('');
 }
+// Sparkline charts: one small KPI card per symbol showing the trailing
+// three months of closing prices.
+const SPARK_VIEW_W = 240;
+const SPARK_VIEW_H = 56;
+const SPARK_PAD = 6;
+const SPARK_PLOT_W = SPARK_VIEW_W - SPARK_PAD * 2;
+const SPARK_PLOT_H = SPARK_VIEW_H - SPARK_PAD * 2;
+
+function sparklinePath(points, toPoint) {
+  return points.map((point, index) => (index === 0 ? 'M' : 'L') + toPoint(point, index)).join(' ');
+}
+
+function renderSparkline(points) {
+  const box = document.createElementNS(NS, 'svg');
+  box.setAttribute('viewBox', '0 0 ' + SPARK_VIEW_W + ' ' + SPARK_VIEW_H);
+  box.setAttribute('role', 'img');
+  box.setAttribute('aria-label', 'Closing price over the last three months');
+
+  // Baseline.
+  box.appendChild(svgEl('line', {
+    x1: SPARK_PAD,
+    y1: SPARK_VIEW_H - SPARK_PAD,
+    x2: SPARK_VIEW_W - SPARK_PAD,
+    y2: SPARK_VIEW_H - SPARK_PAD,
+    stroke: 'var(--border)',
+    'stroke-width': 1,
+  }));
+
+  if (!points.length) {
+    return box;
+  }
+
+  const values = points.map((point) => point.close);
+  const low = Math.min(...values);
+  const high = Math.max(...values);
+  const span = high - low || 1;
+  const step = SPARK_PLOT_W / Math.max(1, points.length - 1);
+  const xAt = (index) => SPARK_PAD + index * step;
+  const yAt = (value) => SPARK_VIEW_H - SPARK_PAD - ((value - low) / span) * SPARK_PLOT_H;
+  const last = points[points.length - 1];
+  const color = last.close >= points[0].close ? 'var(--positive)' : 'var(--negative)';
+
+  // Area under the line.
+  const area = sparklinePath(points, (point, index) =>
+    xAt(index).toFixed(1) + ' ' + yAt(point.close).toFixed(1)) +
+    ' L ' + xAt(points.length - 1).toFixed(1) + ' ' + (SPARK_VIEW_H - SPARK_PAD) +
+    ' L ' + SPARK_PAD + ' ' + (SPARK_VIEW_H - SPARK_PAD) + ' Z';
+  box.appendChild(svgEl('path', {
+    d: area,
+    fill: color,
+    'fill-opacity': 0.12,
+  }));
+
+  // The closing price line.
+  box.appendChild(svgEl('polyline', {
+    points: sparklinePath(points, (point, index) =>
+      xAt(index).toFixed(1) + ',' + yAt(point.close).toFixed(1)),
+    fill: 'none',
+    stroke: color,
+    'stroke-width': 1.75,
+    'stroke-linejoin': 'round',
+    'stroke-linecap': 'round',
+  }));
+
+  // Latest close.
+  box.appendChild(svgEl('circle', {
+    cx: xAt(points.length - 1).toFixed(1),
+    cy: yAt(last.close).toFixed(1),
+    r: 2.5,
+    fill: color,
+  }));
+
+  return box;
+}
+
+function renderSparklines(symbols, statsBySymbol) {
+  const grid = document.getElementById('sparkline-grid');
+  grid.innerHTML = '';
+
+  symbols.forEach((symbol, index) => {
+    const stats = statsBySymbol.get(symbol.symbol) || {};
+    const history = stats.history || [];
+
+    const card = document.createElement('div');
+    card.className = 'sparkline-card';
+    card.style.setProperty('--spark-delay', (index * 30) + 'ms');
+
+    const name = document.createElement('div');
+    name.className = 'sparkline-symbol';
+    name.textContent = symbol.symbol;
+    card.appendChild(name);
+
+    const chart = document.createElement('div');
+    chart.className = 'sparkline-chart';
+    chart.setAttribute('aria-label', symbol.symbol + ' closing price over the last three months');
+    chart.appendChild(renderSparkline(history));
+    card.appendChild(chart);
+
+    if (history.length) {
+      const first = Number(history[0].close);
+      const last = Number(history[history.length - 1].close);
+      const change = first ? (last - first) / first * 100 : 0;
+
+      const value = document.createElement('div');
+      value.className = 'sparkline-value';
+      value.textContent = fmtMoney(last);
+      card.appendChild(value);
+
+      const changeBox = document.createElement('div');
+      changeBox.className = 'sparkline-change ' + (change >= 0 ? 'positive' : 'negative');
+      changeBox.textContent = fmtSignedPct(change);
+      card.appendChild(changeBox);
+    } else {
+      const empty = document.createElement('div');
+      empty.className = 'sparkline-empty';
+      empty.textContent = 'No price history';
+      card.appendChild(empty);
+    }
+
+    grid.appendChild(card);
+  });
+}
+
 async function load() {
   showMessage('Loading...', '');
   try {
@@ -910,6 +1041,7 @@ async function load() {
 
     renderChart(symbols);
     renderPlChart(symbols);
+    renderSparklines(symbols, statsBySymbol);
     renderSectorChart(holdings);
     showMessage('', '');
   } catch (error) {
