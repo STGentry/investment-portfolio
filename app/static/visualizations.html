@@ -111,7 +111,6 @@
           </div>
           <div id="sector-chart"></div>
           <div id="sector-tooltip" class="chart-tooltip" hidden></div>
-          <div id="sector-legend" class="sector-legend"></div>
         </div>
       </div>
     </div>
@@ -644,7 +643,8 @@ function renderPlChart(symbols) {
 }
 
 // Sector mix: the inner ring shows each sector's share of held quantity,
-// the outer ring shows each sector's share of current value.
+// the outer ring shows each sector's share of current value. Every outer ring
+// slice is connected to a label on the left or right side of the chart.
 const SECTOR_VIEW_W = 800;
 const SECTOR_VIEW_H = 416;
 const SECTOR_CENTER_X = 400;
@@ -656,6 +656,14 @@ const SECTOR_PALETTE = [
   '#937860', '#da8bc3', '#8c8c8c', '#ccb974', '#64b5cd',
   '#e24a33', '#3483a2',
 ];
+
+// Labels sit in the gutters on either side of the wheel, at the height of the
+// outer ring slice they describe.
+const SECTOR_LABEL_LEFT_X = 16;
+const SECTOR_LABEL_RIGHT_X = 600;
+const SECTOR_LEADER_LEFT_X = SECTOR_CENTER_X - SECTOR_OUTER_RADIUS - 8;
+const SECTOR_LEADER_RIGHT_X = SECTOR_CENTER_X + SECTOR_OUTER_RADIUS + 12;
+const SECTOR_LABEL_MIN_GAP = 30;
 
 function sectorPoint(radius, angle) {
   const radians = (angle * Math.PI) / 180;
@@ -713,11 +721,69 @@ function attachSectorTooltip(path, sector) {
   path.addEventListener('mousemove', (event) => moveTooltip(event, sectorTooltipBox));
   path.addEventListener('mouseleave', () => { sectorTooltipBox.hidden = true; });
 }
+
+// Put each sector's label in the left or right gutter at the height of its
+// outer ring slice, then nudge labels apart so they never overlap.
+function placeSectorLabels(sectors) {
+  const columns = { left: [], right: [] };
+  sectors.forEach((sector) => {
+    const midpoint = (sector.valueStart + sector.valueEnd) / 2;
+    const point = sectorPoint(SECTOR_OUTER_RADIUS, midpoint);
+    sector.ringX = point.x;
+    sector.ringY = point.y;
+    if (point.x > SECTOR_CENTER_X) {
+      sector.side = 'right';
+    } else if (point.x < SECTOR_CENTER_X) {
+      sector.side = 'left';
+    } else {
+      sector.side = point.y < SECTOR_CENTER_Y ? 'right' : 'left';
+    }
+    sector.labelY = point.y;
+    columns[sector.side].push(sector);
+  });
+  Object.values(columns).forEach((column) => {
+    column.sort((a, b) => a.labelY - b.labelY);
+    for (let i = 1; i < column.length; i++) {
+      if (column[i].labelY - column[i - 1].labelY < SECTOR_LABEL_MIN_GAP) {
+        column[i].labelY = column[i - 1].labelY + SECTOR_LABEL_MIN_GAP;
+      }
+    }
+  });
+}
+
+// Draw the leader line and the label that carries the sector's information.
+function drawSectorLabel(svg, sector) {
+  const anchorX = sector.side === 'left' ? SECTOR_LABEL_LEFT_X : SECTOR_LABEL_RIGHT_X;
+  const leaderX = sector.side === 'left' ? SECTOR_LEADER_LEFT_X : SECTOR_LEADER_RIGHT_X;
+  const labelY = sector.labelY;
+
+  const group = svgEl('g', { 'class': 'sector-label' });
+  group.appendChild(svgEl('line', {
+    x1: sector.ringX.toFixed(2),
+    y1: sector.ringY.toFixed(2),
+    x2: leaderX,
+    y2: labelY.toFixed(2),
+    'class': 'sector-leader',
+    stroke: sector.color,
+    'stroke-width': 1.5,
+  }));
+  group.appendChild(svgEl('text', {
+    x: anchorX,
+    y: (labelY - 7).toFixed(2),
+    'class': 'sector-label-name',
+  }, esc(sector.sector)));
+  group.appendChild(svgEl('text', {
+    x: anchorX,
+    y: (labelY + 7).toFixed(2),
+    'class': 'sector-label-metric',
+  }, 'Qty ' + fmtQty(sector.quantity) + ' · Value ' + fmtMoney(sector.value)));
+  attachSectorTooltip(group, sector);
+  svg.appendChild(group);
+}
+
 function renderSectorChart(holdings) {
   const chartBox = document.getElementById('sector-chart');
-  const legendBox = document.getElementById('sector-legend');
   chartBox.innerHTML = '';
-  legendBox.innerHTML = '';
 
   const totals = new Map();
   for (const holding of holdings) {
@@ -784,22 +850,27 @@ function renderSectorChart(holdings) {
     'dominant-baseline': 'middle',
   }, 'Outer ring: share of current value'));
 
+  // Lay the slices out around the rings.
   let quantityCursor = 0;
   let valueCursor = 0;
+  sectors.forEach((sector) => {
+    sector.quantityStart = quantityCursor;
+    quantityCursor += sector.quantityShare * 360;
+    sector.quantityEnd = quantityCursor;
+
+    sector.valueStart = valueCursor;
+    valueCursor += sector.valueShare * 360;
+    sector.valueEnd = valueCursor;
+  });
+
+  placeSectorLabels(sectors);
 
   sectors.forEach((sector, index) => {
     const color = SECTOR_PALETTE[index % SECTOR_PALETTE.length];
-
-    const quantityStart = quantityCursor;
-    quantityCursor += sector.quantityShare * 360;
-    const quantityEnd = quantityCursor;
-
-    const valueStart = valueCursor;
-    valueCursor += sector.valueShare * 360;
-    const valueEnd = valueCursor;
+    sector.color = color;
 
     const pie = svgEl('path', {
-      d: pieSlicePath(SECTOR_INNER_RADIUS, quantityStart, quantityEnd),
+      d: pieSlicePath(SECTOR_INNER_RADIUS, sector.quantityStart, sector.quantityEnd),
       fill: color,
       'fill-opacity': 0.85,
       stroke: '#ffffff',
@@ -811,7 +882,7 @@ function renderSectorChart(holdings) {
     svg.appendChild(pie);
 
     const wheel = svgEl('path', {
-      d: wheelSlicePath(SECTOR_INNER_RADIUS, SECTOR_OUTER_RADIUS, valueStart, valueEnd),
+      d: wheelSlicePath(SECTOR_INNER_RADIUS, SECTOR_OUTER_RADIUS, sector.valueStart, sector.valueEnd),
       fill: color,
       'fill-opacity': 0.85,
       stroke: '#ffffff',
@@ -823,18 +894,12 @@ function renderSectorChart(holdings) {
     svg.appendChild(wheel);
   });
 
-  chartBox.appendChild(svg);
+  // Labels connected to their outer ring slices.
+  sectors.forEach((sector) => {
+    drawSectorLabel(svg, sector);
+  });
 
-  legendBox.innerHTML = sectors.map((sector, index) => {
-    const color = SECTOR_PALETTE[index % SECTOR_PALETTE.length];
-    return '<div class="sector-legend-item">' +
-      '<span class="sector-legend-swatch" style="background: ' + color + ';"></span>' +
-      '<span class="sector-legend-name">' + esc(sector.sector) + '</span>' +
-      '<span class="sector-legend-metrics">' +
-        '<span>Qty ' + fmtQty(sector.quantity) + '</span>' +
-        '<span>Value ' + fmtMoney(sector.value) + '</span>' +
-      '</span></div>';
-  }).join('');
+  chartBox.appendChild(svg);
 }
 // Sparkline charts: one small KPI card per symbol showing the trailing
 // three months of closing prices.

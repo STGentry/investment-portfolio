@@ -119,7 +119,7 @@ investment-portfolio/
 │       ├── index.html         # Dashboard
 │       ├── trades.html        # Trade entry form
 │       ├── holdings_edit.html # Holdings editor
-│       ├── visualizations.html # Charts (bought/sold vs current quantity)
+│       ├── visualizations.html # Charts (bought/sold vs current quantity, P&L, price history, sector mix)
 │       ├── js/
 │       │   └── nav.js         # Collapsible left-hand page navigation
 │       └── css/style.css

@@ -511,29 +511,26 @@ input.invalid, select.invalid { border-color: var(--negative); }
   stroke-width: 2;
 }
 
-.sector-legend {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  width: 100%;
-  max-width: 420px;
-  margin: 14px auto 0;
-  font-size: 12px;
-  color: var(--muted);
+/* Sector labels connected to the outer ring by leader lines. */
+.sector-chart .sector-leader {
+  transition: stroke-width 0.15s ease;
 }
 
-.sector-legend .sector-legend-item { display: flex; align-items: center; gap: 8px; }
-.sector-legend .sector-legend-swatch {
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
-  border: 1px solid var(--border);
-  flex: none;
+.sector-chart .sector-label:hover .sector-leader {
+  stroke-width: 2;
 }
-.sector-legend .sector-legend-name { flex: 1; color: var(--text); font-weight: 600; }
-.sector-legend .sector-legend-metrics {
-  display: flex;
-  gap: 14px;
+
+.sector-chart .sector-label-name {
+  font-size: 11px;
+  font-weight: 600;
+  fill: var(--text);
+  font-family: inherit;
+}
+
+.sector-chart .sector-label-metric {
+  font-size: 10px;
+  fill: var(--muted);
+  font-family: inherit;
   font-variant-numeric: tabular-nums;
 }
 
