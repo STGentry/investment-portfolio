@@ -733,17 +733,18 @@ function textWidthInEm(text) {
   return width;
 }
 
-// A quadratic bezier from the ring into the gutter that bows away from the
-// wheel, so the line never cuts across the pie.
+// Two straight segments from the ring into the gutter that bow away from the
+// wheel, so the line never cuts across the pie. The segments meet at a hard
+// angle at the bend point.
 function sectorLeaderPath(ringX, ringY, endX, endY) {
   const dx = ringX - SECTOR_CENTER_X;
   const dy = ringY - SECTOR_CENTER_Y;
   const distance = Math.hypot(dx, dy) || 1;
-  const controlX = ringX + (dx / distance) * SECTOR_LEADER_BEND;
-  const controlY = ringY + (dy / distance) * SECTOR_LEADER_BEND;
+  const bendX = ringX + (dx / distance) * SECTOR_LEADER_BEND;
+  const bendY = ringY + (dy / distance) * SECTOR_LEADER_BEND;
   return 'M ' + ringX.toFixed(2) + ' ' + ringY.toFixed(2) +
-    ' Q ' + controlX.toFixed(2) + ' ' + controlY.toFixed(2) +
-    ' ' + endX.toFixed(2) + ' ' + endY.toFixed(2);
+    ' L ' + bendX.toFixed(2) + ' ' + bendY.toFixed(2) +
+    ' L ' + endX.toFixed(2) + ' ' + endY.toFixed(2);
 }
 
 // Draw a white percentage at the middle of a slice. The font shrinks to fit the
@@ -825,7 +826,7 @@ function placeSectorLabels(sectors) {
   });
 }
 
-// Draw the curved leader line and the callout label that names the sector.
+// Draw the leader line and the callout label that names the sector.
 function drawSectorLabel(svg, sector) {
   const isLeft = sector.side === 'left';
   const anchorX = isLeft ? SECTOR_LABEL_LEFT_X : SECTOR_LABEL_RIGHT_X;
@@ -841,6 +842,7 @@ function drawSectorLabel(svg, sector) {
     'class': 'sector-leader',
     stroke: sector.color,
     'stroke-width': 1.5,
+    'stroke-linejoin': 'miter',
     fill: 'none',
   }));
   group.appendChild(svgEl('text', {

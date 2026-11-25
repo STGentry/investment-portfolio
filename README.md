@@ -10,6 +10,15 @@ machine (the "app server") and stores data in SQLite.
 - Full audit trail of all buy/sell/dividend trades
 - Dashboard, trade entry form, ownership split editor, and visualizations (static HTML/CSS, no build step)
 
+## Visualizations
+
+The visualizations page (`/visualizations.html`) renders static SVG charts with no build step:
+
+- Position quantity evolution: shares bought and sold against current quantity
+- Unrealized P&L: positive and negative positions around a $0 line
+- Price movement: trailing three-month closing price sparklines per position
+- Sector mix: inner ring shows quantity share, outer ring shows value share, with straight leader lines that meet the labels at hard angles
+
 ## Agent Coding Instructions
 
 - Never use images for testing and validation
