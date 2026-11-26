@@ -648,8 +648,15 @@ function renderPlChart(symbols) {
 // Sector mix: the inner ring shows each sector's share of held quantity,
 // the outer ring shows each sector's share of current value. Sectors are
 // identified by the color-coded legend to the left of the wheel.
-const SECTOR_VIEW_W = 800;
-const SECTOR_VIEW_H = 416;
+//
+// The viewBox is cropped to the wheel plus its ring labels so the pie fills
+// the card instead of leaving empty gutters on either side. The content spans
+// x 236-564 (the outer stroke at radius 164) and y ~12-404 (the ring labels
+// sit 30 units beyond the outer radius at the top and bottom).
+const SECTOR_VIEW_X = 234;
+const SECTOR_VIEW_Y = 8;
+const SECTOR_VIEW_W = 332;
+const SECTOR_VIEW_H = 400;
 const SECTOR_CENTER_X = 400;
 const SECTOR_CENTER_Y = 208;
 const SECTOR_INNER_RADIUS = 87;
@@ -808,7 +815,7 @@ function renderSectorChart(holdings) {
   });
 
   const svg = svgEl('svg', {
-    viewBox: '0 0 ' + SECTOR_VIEW_W + ' ' + SECTOR_VIEW_H,
+    viewBox: SECTOR_VIEW_X + ' ' + SECTOR_VIEW_Y + ' ' + SECTOR_VIEW_W + ' ' + SECTOR_VIEW_H,
     width: SECTOR_VIEW_W,
     height: SECTOR_VIEW_H,
     role: 'img',
